@@ -1,1646 +1,1538 @@
 /*
-MIT License
 
-Copyright (c) 2017 Pavel Dobryakov
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
 */
-
-'use strict';
-
-// Mobile promo section
-
-const promoPopup = document.getElementsByClassName('promo')[0];
-const promoPopupClose = document.getElementsByClassName('promo-close')[0];
-
-if (isMobile()) {
-    setTimeout(() => {
-        promoPopup.style.display = 'table';
-    }, 20000);
-}
-
-promoPopupClose.addEventListener('click', e => {
-    promoPopup.style.display = 'none';
-});
-
-const appleLink = document.getElementById('apple_link');
-appleLink.addEventListener('click', e => {
-    ga('send', 'event', 'link promo', 'app');
-    window.open('https://apps.apple.com/us/app/fluid-simulation/id1443124993');
-});
-
-const googleLink = document.getElementById('google_link');
-googleLink.addEventListener('click', e => {
-    ga('send', 'event', 'link promo', 'app');
-    window.open('https://play.google.com/store/apps/details?id=games.paveldogreat.fluidsimfree');
-});
-
-// Simulation section
-
-const canvas = document.getElementsByTagName('canvas')[0];
-resizeCanvas();
-
-let config = {
-    SIM_RESOLUTION: 128,
-    DYE_RESOLUTION: 1024,
-    CAPTURE_RESOLUTION: 512,
-    DENSITY_DISSIPATION: 1,
-    VELOCITY_DISSIPATION: 0.2,
-    PRESSURE: 0.8,
-    PRESSURE_ITERATIONS: 20,
-    CURL: 30,
-    SPLAT_RADIUS: 0.25,
-    SPLAT_FORCE: 6000,
-    SHADING: true,
-    COLORFUL: true,
-    COLOR_UPDATE_SPEED: 10,
-    PAUSED: false,
-    BACK_COLOR: { r: 0, g: 0, b: 0 },
-    TRANSPARENT: false,
-    BLOOM: true,
-    BLOOM_ITERATIONS: 8,
-    BLOOM_RESOLUTION: 256,
-    BLOOM_INTENSITY: 0.8,
-    BLOOM_THRESHOLD: 0.6,
-    BLOOM_SOFT_KNEE: 0.7,
-    SUNRAYS: true,
-    SUNRAYS_RESOLUTION: 196,
-    SUNRAYS_WEIGHT: 1.0,
-}
-
-function pointerPrototype () {
-    this.id = -1;
-    this.texcoordX = 0;
-    this.texcoordY = 0;
-    this.prevTexcoordX = 0;
-    this.prevTexcoordY = 0;
-    this.deltaX = 0;
-    this.deltaY = 0;
-    this.down = false;
-    this.moved = false;
-    this.color = [30, 0, 300];
-}
-
-let pointers = [];
-let splatStack = [];
-pointers.push(new pointerPrototype());
-
-const { gl, ext } = getWebGLContext(canvas);
-
-if (isMobile()) {
-    config.DYE_RESOLUTION = 512;
-}
-if (!ext.supportLinearFiltering) {
-    config.DYE_RESOLUTION = 512;
-    config.SHADING = false;
-    config.BLOOM = false;
-    config.SUNRAYS = false;
-}
-
-startGUI();
-
-function getWebGLContext (canvas) {
-    const params = { alpha: true, depth: false, stencil: false, antialias: false, preserveDrawingBuffer: false };
-
-    let gl = canvas.getContext('webgl2', params);
-    const isWebGL2 = !!gl;
-    if (!isWebGL2)
-        gl = canvas.getContext('webgl', params) || canvas.getContext('experimental-webgl', params);
-
-    let halfFloat;
-    let supportLinearFiltering;
-    if (isWebGL2) {
-        gl.getExtension('EXT_color_buffer_float');
-        supportLinearFiltering = gl.getExtension('OES_texture_float_linear');
-    } else {
-        halfFloat = gl.getExtension('OES_texture_half_float');
-        supportLinearFiltering = gl.getExtension('OES_texture_half_float_linear');
-    }
-
-    gl.clearColor(0.0, 0.0, 0.0, 1.0);
-
-    const halfFloatTexType = isWebGL2 ? gl.HALF_FLOAT : halfFloat.HALF_FLOAT_OES;
-    let formatRGBA;
-    let formatRG;
-    let formatR;
-
-    if (isWebGL2)
-    {
-        formatRGBA = getSupportedFormat(gl, gl.RGBA16F, gl.RGBA, halfFloatTexType);
-        formatRG = getSupportedFormat(gl, gl.RG16F, gl.RG, halfFloatTexType);
-        formatR = getSupportedFormat(gl, gl.R16F, gl.RED, halfFloatTexType);
-    }
-    else
-    {
-        formatRGBA = getSupportedFormat(gl, gl.RGBA, gl.RGBA, halfFloatTexType);
-        formatRG = getSupportedFormat(gl, gl.RGBA, gl.RGBA, halfFloatTexType);
-        formatR = getSupportedFormat(gl, gl.RGBA, gl.RGBA, halfFloatTexType);
-    }
-
-    ga('send', 'event', isWebGL2 ? 'webgl2' : 'webgl', formatRGBA == null ? 'not supported' : 'supported');
-
-    return {
-        gl,
-        ext: {
-            formatRGBA,
-            formatRG,
-            formatR,
-            halfFloatTexType,
-            supportLinearFiltering
+(window.webpackJsonp = window.webpackJsonp || []).push([[1], {
+    174: function() {},
+    216: function(t, e, n) {
+        "use strict";
+        n.r(e);
+        var r = n(3)
+          , o = n(12)
+          , c = n(45)
+          , i = n(87);
+        function a(t, e) {
+            if (!(t instanceof e))
+                throw new TypeError("Cannot call a class as a function")
         }
-    };
-}
-
-function getSupportedFormat (gl, internalFormat, format, type)
-{
-    if (!supportRenderTextureFormat(gl, internalFormat, format, type))
-    {
-        switch (internalFormat)
-        {
-            case gl.R16F:
-                return getSupportedFormat(gl, gl.RG16F, gl.RG, type);
-            case gl.RG16F:
-                return getSupportedFormat(gl, gl.RGBA16F, gl.RGBA, type);
-            default:
-                return null;
+        function u(t, e) {
+            for (var n = 0; n < e.length; n++) {
+                var r = e[n];
+                r.enumerable = r.enumerable || !1,
+                r.configurable = !0,
+                "value"in r && (r.writable = !0),
+                Object.defineProperty(t, r.key, r)
+            }
         }
-    }
-
-    return {
-        internalFormat,
-        format
-    }
-}
-
-function supportRenderTextureFormat (gl, internalFormat, format, type) {
-    let texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, 4, 4, 0, format, type, null);
-
-    let fbo = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-
-    let status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
-    return status == gl.FRAMEBUFFER_COMPLETE;
-}
-
-function startGUI () {
-    var gui = new dat.GUI({ width: 300 });
-    gui.add(config, 'DYE_RESOLUTION', { 'high': 1024, 'medium': 512, 'low': 256, 'very low': 128 }).name('quality').onFinishChange(initFramebuffers);
-    gui.add(config, 'SIM_RESOLUTION', { '32': 32, '64': 64, '128': 128, '256': 256 }).name('sim resolution').onFinishChange(initFramebuffers);
-    gui.add(config, 'DENSITY_DISSIPATION', 0, 4.0).name('density diffusion');
-    gui.add(config, 'VELOCITY_DISSIPATION', 0, 4.0).name('velocity diffusion');
-    gui.add(config, 'PRESSURE', 0.0, 1.0).name('pressure');
-    gui.add(config, 'CURL', 0, 50).name('vorticity').step(1);
-    gui.add(config, 'SPLAT_RADIUS', 0.01, 1.0).name('splat radius');
-    gui.add(config, 'SHADING').name('shading').onFinishChange(updateKeywords);
-    gui.add(config, 'COLORFUL').name('colorful');
-    gui.add(config, 'PAUSED').name('paused').listen();
-
-    gui.add({ fun: () => {
-        splatStack.push(parseInt(Math.random() * 20) + 5);
-    } }, 'fun').name('Random splats');
-
-    let bloomFolder = gui.addFolder('Bloom');
-    bloomFolder.add(config, 'BLOOM').name('enabled').onFinishChange(updateKeywords);
-    bloomFolder.add(config, 'BLOOM_INTENSITY', 0.1, 2.0).name('intensity');
-    bloomFolder.add(config, 'BLOOM_THRESHOLD', 0.0, 1.0).name('threshold');
-
-    let sunraysFolder = gui.addFolder('Sunrays');
-    sunraysFolder.add(config, 'SUNRAYS').name('enabled').onFinishChange(updateKeywords);
-    sunraysFolder.add(config, 'SUNRAYS_WEIGHT', 0.3, 1.0).name('weight');
-
-    let captureFolder = gui.addFolder('Capture');
-    captureFolder.addColor(config, 'BACK_COLOR').name('background color');
-    captureFolder.add(config, 'TRANSPARENT').name('transparent');
-    captureFolder.add({ fun: captureScreenshot }, 'fun').name('take screenshot');
-
-    let github = gui.add({ fun : () => {
-        window.open('https://github.com/PavelDoGreat/WebGL-Fluid-Simulation');
-        ga('send', 'event', 'link button', 'github');
-    } }, 'fun').name('Github');
-    github.__li.className = 'cr function bigFont';
-    github.__li.style.borderLeft = '3px solid #8C8C8C';
-    let githubIcon = document.createElement('span');
-    github.domElement.parentElement.appendChild(githubIcon);
-    githubIcon.className = 'icon github';
-
-    let twitter = gui.add({ fun : () => {
-        ga('send', 'event', 'link button', 'twitter');
-        window.open('https://twitter.com/PavelDoGreat');
-    } }, 'fun').name('Twitter');
-    twitter.__li.className = 'cr function bigFont';
-    twitter.__li.style.borderLeft = '3px solid #8C8C8C';
-    let twitterIcon = document.createElement('span');
-    twitter.domElement.parentElement.appendChild(twitterIcon);
-    twitterIcon.className = 'icon twitter';
-
-    let discord = gui.add({ fun : () => {
-        ga('send', 'event', 'link button', 'discord');
-        window.open('https://discordapp.com/invite/CeqZDDE');
-    } }, 'fun').name('Discord');
-    discord.__li.className = 'cr function bigFont';
-    discord.__li.style.borderLeft = '3px solid #8C8C8C';
-    let discordIcon = document.createElement('span');
-    discord.domElement.parentElement.appendChild(discordIcon);
-    discordIcon.className = 'icon discord';
-
-    let app = gui.add({ fun : () => {
-        ga('send', 'event', 'link button', 'app');
-        window.open('http://onelink.to/5b58bn');
-    } }, 'fun').name('Check out mobile app');
-    app.__li.className = 'cr function appBigFont';
-    app.__li.style.borderLeft = '3px solid #00FF7F';
-    let appIcon = document.createElement('span');
-    app.domElement.parentElement.appendChild(appIcon);
-    appIcon.className = 'icon app';
-
-    if (isMobile())
-        gui.close();
-}
-
-function isMobile () {
-    return /Mobi|Android/i.test(navigator.userAgent);
-}
-
-function captureScreenshot () {
-    let res = getResolution(config.CAPTURE_RESOLUTION);
-    let target = createFBO(res.width, res.height, ext.formatRGBA.internalFormat, ext.formatRGBA.format, ext.halfFloatTexType, gl.NEAREST);
-    render(target);
-
-    let texture = framebufferToTexture(target);
-    texture = normalizeTexture(texture, target.width, target.height);
-
-    let captureCanvas = textureToCanvas(texture, target.width, target.height);
-    let datauri = captureCanvas.toDataURL();
-    downloadURI('fluid.png', datauri);
-    URL.revokeObjectURL(datauri);
-}
-
-function framebufferToTexture (target) {
-    gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
-    let length = target.width * target.height * 4;
-    let texture = new Float32Array(length);
-    gl.readPixels(0, 0, target.width, target.height, gl.RGBA, gl.FLOAT, texture);
-    return texture;
-}
-
-function normalizeTexture (texture, width, height) {
-    let result = new Uint8Array(texture.length);
-    let id = 0;
-    for (let i = height - 1; i >= 0; i--) {
-        for (let j = 0; j < width; j++) {
-            let nid = i * width * 4 + j * 4;
-            result[nid + 0] = clamp01(texture[id + 0]) * 255;
-            result[nid + 1] = clamp01(texture[id + 1]) * 255;
-            result[nid + 2] = clamp01(texture[id + 2]) * 255;
-            result[nid + 3] = clamp01(texture[id + 3]) * 255;
-            id += 4;
+        function f(t, e, n) {
+            return f = "undefined" != typeof Reflect && Reflect.get ? Reflect.get : function(t, e, n) {
+                var r = function(t, e) {
+                    for (; !Object.prototype.hasOwnProperty.call(t, e) && null !== (t = h(t)); )
+                        ;
+                    return t
+                }(t, e);
+                if (r) {
+                    var o = Object.getOwnPropertyDescriptor(r, e);
+                    return o.get ? o.get.call(n) : o.value
+                }
+            }
+            ,
+            f(t, e, n || t)
         }
-    }
-    return result;
-}
-
-function clamp01 (input) {
-    return Math.min(Math.max(input, 0), 1);
-}
-
-function textureToCanvas (texture, width, height) {
-    let captureCanvas = document.createElement('canvas');
-    let ctx = captureCanvas.getContext('2d');
-    captureCanvas.width = width;
-    captureCanvas.height = height;
-
-    let imageData = ctx.createImageData(width, height);
-    imageData.data.set(texture);
-    ctx.putImageData(imageData, 0, 0);
-
-    return captureCanvas;
-}
-
-function downloadURI (filename, uri) {
-    let link = document.createElement('a');
-    link.download = filename;
-    link.href = uri;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
-
-class Material {
-    constructor (vertexShader, fragmentShaderSource) {
-        this.vertexShader = vertexShader;
-        this.fragmentShaderSource = fragmentShaderSource;
-        this.programs = [];
-        this.activeProgram = null;
-        this.uniforms = [];
-    }
-
-    setKeywords (keywords) {
-        let hash = 0;
-        for (let i = 0; i < keywords.length; i++)
-            hash += hashCode(keywords[i]);
-
-        let program = this.programs[hash];
-        if (program == null)
-        {
-            let fragmentShader = compileShader(gl.FRAGMENT_SHADER, this.fragmentShaderSource, keywords);
-            program = createProgram(this.vertexShader, fragmentShader);
-            this.programs[hash] = program;
+        function l(t, e) {
+            return l = Object.setPrototypeOf || function(t, e) {
+                return t.__proto__ = e,
+                t
+            }
+            ,
+            l(t, e)
         }
-
-        if (program == this.activeProgram) return;
-
-        this.uniforms = getUniforms(program);
-        this.activeProgram = program;
-    }
-
-    bind () {
-        gl.useProgram(this.activeProgram);
-    }
-}
-
-class Program {
-    constructor (vertexShader, fragmentShader) {
-        this.uniforms = {};
-        this.program = createProgram(vertexShader, fragmentShader);
-        this.uniforms = getUniforms(this.program);
-    }
-
-    bind () {
-        gl.useProgram(this.program);
-    }
-}
-
-function createProgram (vertexShader, fragmentShader) {
-    let program = gl.createProgram();
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS))
-        console.trace(gl.getProgramInfoLog(program));
-
-    return program;
-}
-
-function getUniforms (program) {
-    let uniforms = [];
-    let uniformCount = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
-    for (let i = 0; i < uniformCount; i++) {
-        let uniformName = gl.getActiveUniform(program, i).name;
-        uniforms[uniformName] = gl.getUniformLocation(program, uniformName);
-    }
-    return uniforms;
-}
-
-function compileShader (type, source, keywords) {
-    source = addKeywords(source, keywords);
-
-    const shader = gl.createShader(type);
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
-        console.trace(gl.getShaderInfoLog(shader));
-
-    return shader;
-};
-
-function addKeywords (source, keywords) {
-    if (keywords == null) return source;
-    let keywordsString = '';
-    keywords.forEach(keyword => {
-        keywordsString += '#define ' + keyword + '\n';
-    });
-    return keywordsString + source;
-}
-
-const baseVertexShader = compileShader(gl.VERTEX_SHADER, `
-    precision highp float;
-
-    attribute vec2 aPosition;
-    varying vec2 vUv;
-    varying vec2 vL;
-    varying vec2 vR;
-    varying vec2 vT;
-    varying vec2 vB;
-    uniform vec2 texelSize;
-
-    void main () {
-        vUv = aPosition * 0.5 + 0.5;
-        vL = vUv - vec2(texelSize.x, 0.0);
-        vR = vUv + vec2(texelSize.x, 0.0);
-        vT = vUv + vec2(0.0, texelSize.y);
-        vB = vUv - vec2(0.0, texelSize.y);
-        gl_Position = vec4(aPosition, 0.0, 1.0);
-    }
-`);
-
-const blurVertexShader = compileShader(gl.VERTEX_SHADER, `
-    precision highp float;
-
-    attribute vec2 aPosition;
-    varying vec2 vUv;
-    varying vec2 vL;
-    varying vec2 vR;
-    uniform vec2 texelSize;
-
-    void main () {
-        vUv = aPosition * 0.5 + 0.5;
-        float offset = 1.33333333;
-        vL = vUv - texelSize * offset;
-        vR = vUv + texelSize * offset;
-        gl_Position = vec4(aPosition, 0.0, 1.0);
-    }
-`);
-
-const blurShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision mediump float;
-    precision mediump sampler2D;
-
-    varying vec2 vUv;
-    varying vec2 vL;
-    varying vec2 vR;
-    uniform sampler2D uTexture;
-
-    void main () {
-        vec4 sum = texture2D(uTexture, vUv) * 0.29411764;
-        sum += texture2D(uTexture, vL) * 0.35294117;
-        sum += texture2D(uTexture, vR) * 0.35294117;
-        gl_FragColor = sum;
-    }
-`);
-
-const copyShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision mediump float;
-    precision mediump sampler2D;
-
-    varying highp vec2 vUv;
-    uniform sampler2D uTexture;
-
-    void main () {
-        gl_FragColor = texture2D(uTexture, vUv);
-    }
-`);
-
-const clearShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision mediump float;
-    precision mediump sampler2D;
-
-    varying highp vec2 vUv;
-    uniform sampler2D uTexture;
-    uniform float value;
-
-    void main () {
-        gl_FragColor = value * texture2D(uTexture, vUv);
-    }
-`);
-
-const colorShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision mediump float;
-
-    uniform vec4 color;
-
-    void main () {
-        gl_FragColor = color;
-    }
-`);
-
-const checkerboardShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision highp float;
-    precision highp sampler2D;
-
-    varying vec2 vUv;
-    uniform sampler2D uTexture;
-    uniform float aspectRatio;
-
-    #define SCALE 25.0
-
-    void main () {
-        vec2 uv = floor(vUv * SCALE * vec2(aspectRatio, 1.0));
-        float v = mod(uv.x + uv.y, 2.0);
-        v = v * 0.1 + 0.8;
-        gl_FragColor = vec4(vec3(v), 1.0);
-    }
-`);
-
-const displayShaderSource = `
-    precision highp float;
-    precision highp sampler2D;
-
-    varying vec2 vUv;
-    varying vec2 vL;
-    varying vec2 vR;
-    varying vec2 vT;
-    varying vec2 vB;
-    uniform sampler2D uTexture;
-    uniform sampler2D uBloom;
-    uniform sampler2D uSunrays;
-    uniform sampler2D uDithering;
-    uniform vec2 ditherScale;
-    uniform vec2 texelSize;
-
-    vec3 linearToGamma (vec3 color) {
-        color = max(color, vec3(0));
-        return max(1.055 * pow(color, vec3(0.416666667)) - 0.055, vec3(0));
-    }
-
-    void main () {
-        vec3 c = texture2D(uTexture, vUv).rgb;
-
-    #ifdef SHADING
-        vec3 lc = texture2D(uTexture, vL).rgb;
-        vec3 rc = texture2D(uTexture, vR).rgb;
-        vec3 tc = texture2D(uTexture, vT).rgb;
-        vec3 bc = texture2D(uTexture, vB).rgb;
-
-        float dx = length(rc) - length(lc);
-        float dy = length(tc) - length(bc);
-
-        vec3 n = normalize(vec3(dx, dy, length(texelSize)));
-        vec3 l = vec3(0.0, 0.0, 1.0);
-
-        float diffuse = clamp(dot(n, l) + 0.7, 0.7, 1.0);
-        c *= diffuse;
-    #endif
-
-    #ifdef BLOOM
-        vec3 bloom = texture2D(uBloom, vUv).rgb;
-    #endif
-
-    #ifdef SUNRAYS
-        float sunrays = texture2D(uSunrays, vUv).r;
-        c *= sunrays;
-    #ifdef BLOOM
-        bloom *= sunrays;
-    #endif
-    #endif
-
-    #ifdef BLOOM
-        float noise = texture2D(uDithering, vUv * ditherScale).r;
-        noise = noise * 2.0 - 1.0;
-        bloom += noise / 255.0;
-        bloom = linearToGamma(bloom);
-        c += bloom;
-    #endif
-
-        float a = max(c.r, max(c.g, c.b));
-        gl_FragColor = vec4(c, a);
-    }
-`;
-
-const bloomPrefilterShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision mediump float;
-    precision mediump sampler2D;
-
-    varying vec2 vUv;
-    uniform sampler2D uTexture;
-    uniform vec3 curve;
-    uniform float threshold;
-
-    void main () {
-        vec3 c = texture2D(uTexture, vUv).rgb;
-        float br = max(c.r, max(c.g, c.b));
-        float rq = clamp(br - curve.x, 0.0, curve.y);
-        rq = curve.z * rq * rq;
-        c *= max(rq, br - threshold) / max(br, 0.0001);
-        gl_FragColor = vec4(c, 0.0);
-    }
-`);
-
-const bloomBlurShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision mediump float;
-    precision mediump sampler2D;
-
-    varying vec2 vL;
-    varying vec2 vR;
-    varying vec2 vT;
-    varying vec2 vB;
-    uniform sampler2D uTexture;
-
-    void main () {
-        vec4 sum = vec4(0.0);
-        sum += texture2D(uTexture, vL);
-        sum += texture2D(uTexture, vR);
-        sum += texture2D(uTexture, vT);
-        sum += texture2D(uTexture, vB);
-        sum *= 0.25;
-        gl_FragColor = sum;
-    }
-`);
-
-const bloomFinalShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision mediump float;
-    precision mediump sampler2D;
-
-    varying vec2 vL;
-    varying vec2 vR;
-    varying vec2 vT;
-    varying vec2 vB;
-    uniform sampler2D uTexture;
-    uniform float intensity;
-
-    void main () {
-        vec4 sum = vec4(0.0);
-        sum += texture2D(uTexture, vL);
-        sum += texture2D(uTexture, vR);
-        sum += texture2D(uTexture, vT);
-        sum += texture2D(uTexture, vB);
-        sum *= 0.25;
-        gl_FragColor = sum * intensity;
-    }
-`);
-
-const sunraysMaskShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision highp float;
-    precision highp sampler2D;
-
-    varying vec2 vUv;
-    uniform sampler2D uTexture;
-
-    void main () {
-        vec4 c = texture2D(uTexture, vUv);
-        float br = max(c.r, max(c.g, c.b));
-        c.a = 1.0 - min(max(br * 20.0, 0.0), 0.8);
-        gl_FragColor = c;
-    }
-`);
-
-const sunraysShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision highp float;
-    precision highp sampler2D;
-
-    varying vec2 vUv;
-    uniform sampler2D uTexture;
-    uniform float weight;
-
-    #define ITERATIONS 16
-
-    void main () {
-        float Density = 0.3;
-        float Decay = 0.95;
-        float Exposure = 0.7;
-
-        vec2 coord = vUv;
-        vec2 dir = vUv - 0.5;
-
-        dir *= 1.0 / float(ITERATIONS) * Density;
-        float illuminationDecay = 1.0;
-
-        float color = texture2D(uTexture, vUv).a;
-
-        for (int i = 0; i < ITERATIONS; i++)
-        {
-            coord -= dir;
-            float col = texture2D(uTexture, coord).a;
-            color += col * illuminationDecay * weight;
-            illuminationDecay *= Decay;
+        function s(t) {
+            var e = function() {
+                if ("undefined" == typeof Reflect || !Reflect.construct)
+                    return !1;
+                if (Reflect.construct.sham)
+                    return !1;
+                if ("function" == typeof Proxy)
+                    return !0;
+                try {
+                    return Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], (function() {}
+                    ))),
+                    !0
+                } catch (t) {
+                    return !1
+                }
+            }();
+            return function() {
+                var n, r = h(t);
+                if (e) {
+                    var o = h(this).constructor;
+                    n = Reflect.construct(r, arguments, o)
+                } else
+                    n = r.apply(this, arguments);
+                return p(this, n)
+            }
         }
-
-        gl_FragColor = vec4(color * Exposure, 0.0, 0.0, 1.0);
-    }
-`);
-
-const splatShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision highp float;
-    precision highp sampler2D;
-
-    varying vec2 vUv;
-    uniform sampler2D uTarget;
-    uniform float aspectRatio;
-    uniform vec3 color;
-    uniform vec2 point;
-    uniform float radius;
-
-    void main () {
-        vec2 p = vUv - point.xy;
-        p.x *= aspectRatio;
-        vec3 splat = exp(-dot(p, p) / radius) * color;
-        vec3 base = texture2D(uTarget, vUv).xyz;
-        gl_FragColor = vec4(base + splat, 1.0);
-    }
-`);
-
-const advectionShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision highp float;
-    precision highp sampler2D;
-
-    varying vec2 vUv;
-    uniform sampler2D uVelocity;
-    uniform sampler2D uSource;
-    uniform vec2 texelSize;
-    uniform vec2 dyeTexelSize;
-    uniform float dt;
-    uniform float dissipation;
-
-    vec4 bilerp (sampler2D sam, vec2 uv, vec2 tsize) {
-        vec2 st = uv / tsize - 0.5;
-
-        vec2 iuv = floor(st);
-        vec2 fuv = fract(st);
-
-        vec4 a = texture2D(sam, (iuv + vec2(0.5, 0.5)) * tsize);
-        vec4 b = texture2D(sam, (iuv + vec2(1.5, 0.5)) * tsize);
-        vec4 c = texture2D(sam, (iuv + vec2(0.5, 1.5)) * tsize);
-        vec4 d = texture2D(sam, (iuv + vec2(1.5, 1.5)) * tsize);
-
-        return mix(mix(a, b, fuv.x), mix(c, d, fuv.x), fuv.y);
-    }
-
-    void main () {
-    #ifdef MANUAL_FILTERING
-        vec2 coord = vUv - dt * bilerp(uVelocity, vUv, texelSize).xy * texelSize;
-        vec4 result = bilerp(uSource, coord, dyeTexelSize);
-    #else
-        vec2 coord = vUv - dt * texture2D(uVelocity, vUv).xy * texelSize;
-        vec4 result = texture2D(uSource, coord);
-    #endif
-        float decay = 1.0 + dissipation * dt;
-        gl_FragColor = result / decay;
-    }`,
-    ext.supportLinearFiltering ? null : ['MANUAL_FILTERING']
-);
-
-const divergenceShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision mediump float;
-    precision mediump sampler2D;
-
-    varying highp vec2 vUv;
-    varying highp vec2 vL;
-    varying highp vec2 vR;
-    varying highp vec2 vT;
-    varying highp vec2 vB;
-    uniform sampler2D uVelocity;
-
-    void main () {
-        float L = texture2D(uVelocity, vL).x;
-        float R = texture2D(uVelocity, vR).x;
-        float T = texture2D(uVelocity, vT).y;
-        float B = texture2D(uVelocity, vB).y;
-
-        vec2 C = texture2D(uVelocity, vUv).xy;
-        if (vL.x < 0.0) { L = -C.x; }
-        if (vR.x > 1.0) { R = -C.x; }
-        if (vT.y > 1.0) { T = -C.y; }
-        if (vB.y < 0.0) { B = -C.y; }
-
-        float div = 0.5 * (R - L + T - B);
-        gl_FragColor = vec4(div, 0.0, 0.0, 1.0);
-    }
-`);
-
-const curlShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision mediump float;
-    precision mediump sampler2D;
-
-    varying highp vec2 vUv;
-    varying highp vec2 vL;
-    varying highp vec2 vR;
-    varying highp vec2 vT;
-    varying highp vec2 vB;
-    uniform sampler2D uVelocity;
-
-    void main () {
-        float L = texture2D(uVelocity, vL).y;
-        float R = texture2D(uVelocity, vR).y;
-        float T = texture2D(uVelocity, vT).x;
-        float B = texture2D(uVelocity, vB).x;
-        float vorticity = R - L - T + B;
-        gl_FragColor = vec4(0.5 * vorticity, 0.0, 0.0, 1.0);
-    }
-`);
-
-const vorticityShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision highp float;
-    precision highp sampler2D;
-
-    varying vec2 vUv;
-    varying vec2 vL;
-    varying vec2 vR;
-    varying vec2 vT;
-    varying vec2 vB;
-    uniform sampler2D uVelocity;
-    uniform sampler2D uCurl;
-    uniform float curl;
-    uniform float dt;
-
-    void main () {
-        float L = texture2D(uCurl, vL).x;
-        float R = texture2D(uCurl, vR).x;
-        float T = texture2D(uCurl, vT).x;
-        float B = texture2D(uCurl, vB).x;
-        float C = texture2D(uCurl, vUv).x;
-
-        vec2 force = 0.5 * vec2(abs(T) - abs(B), abs(R) - abs(L));
-        force /= length(force) + 0.0001;
-        force *= curl * C;
-        force.y *= -1.0;
-
-        vec2 velocity = texture2D(uVelocity, vUv).xy;
-        velocity += force * dt;
-        velocity = min(max(velocity, -1000.0), 1000.0);
-        gl_FragColor = vec4(velocity, 0.0, 1.0);
-    }
-`);
-
-const pressureShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision mediump float;
-    precision mediump sampler2D;
-
-    varying highp vec2 vUv;
-    varying highp vec2 vL;
-    varying highp vec2 vR;
-    varying highp vec2 vT;
-    varying highp vec2 vB;
-    uniform sampler2D uPressure;
-    uniform sampler2D uDivergence;
-
-    void main () {
-        float L = texture2D(uPressure, vL).x;
-        float R = texture2D(uPressure, vR).x;
-        float T = texture2D(uPressure, vT).x;
-        float B = texture2D(uPressure, vB).x;
-        float C = texture2D(uPressure, vUv).x;
-        float divergence = texture2D(uDivergence, vUv).x;
-        float pressure = (L + R + B + T - divergence) * 0.25;
-        gl_FragColor = vec4(pressure, 0.0, 0.0, 1.0);
-    }
-`);
-
-const gradientSubtractShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision mediump float;
-    precision mediump sampler2D;
-
-    varying highp vec2 vUv;
-    varying highp vec2 vL;
-    varying highp vec2 vR;
-    varying highp vec2 vT;
-    varying highp vec2 vB;
-    uniform sampler2D uPressure;
-    uniform sampler2D uVelocity;
-
-    void main () {
-        float L = texture2D(uPressure, vL).x;
-        float R = texture2D(uPressure, vR).x;
-        float T = texture2D(uPressure, vT).x;
-        float B = texture2D(uPressure, vB).x;
-        vec2 velocity = texture2D(uVelocity, vUv).xy;
-        velocity.xy -= vec2(R - L, T - B);
-        gl_FragColor = vec4(velocity, 0.0, 1.0);
-    }
-`);
-
-const blit = (() => {
-    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1, 1, 1, 1, -1]), gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 0, 2, 3]), gl.STATIC_DRAW);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    gl.enableVertexAttribArray(0);
-
-    return (target, clear = false) => {
-        if (target == null)
-        {
-            gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        function p(t, e) {
+            if (e && ("object" === y(e) || "function" == typeof e))
+                return e;
+            if (void 0 !== e)
+                throw new TypeError("Derived constructors may only return object or undefined");
+            return function(t) {
+                if (void 0 === t)
+                    throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
+                return t
+            }(t)
         }
-        else
-        {
-            gl.viewport(0, 0, target.width, target.height);
-            gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+        function h(t) {
+            return h = Object.setPrototypeOf ? Object.getPrototypeOf : function(t) {
+                return t.__proto__ || Object.getPrototypeOf(t)
+            }
+            ,
+            h(t)
         }
-        if (clear)
-        {
-            gl.clearColor(0.0, 0.0, 0.0, 1.0);
-            gl.clear(gl.COLOR_BUFFER_BIT);
+        function y(t) {
+            return y = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(t) {
+                return typeof t
+            }
+            : function(t) {
+                return t && "function" == typeof Symbol && t.constructor === Symbol && t !== Symbol.prototype ? "symbol" : typeof t
+            }
+            ,
+            y(t)
         }
-        // CHECK_FRAMEBUFFER_STATUS();
-        gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
-    }
-})();
-
-function CHECK_FRAMEBUFFER_STATUS () {
-    let status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
-    if (status != gl.FRAMEBUFFER_COMPLETE)
-        console.trace("Framebuffer error: " + status);
-}
-
-let dye;
-let velocity;
-let divergence;
-let curl;
-let pressure;
-let bloom;
-let bloomFramebuffers = [];
-let sunrays;
-let sunraysTemp;
-
-let ditheringTexture = createTextureAsync('LDR_LLL1_0.png');
-
-const blurProgram            = new Program(blurVertexShader, blurShader);
-const copyProgram            = new Program(baseVertexShader, copyShader);
-const clearProgram           = new Program(baseVertexShader, clearShader);
-const colorProgram           = new Program(baseVertexShader, colorShader);
-const checkerboardProgram    = new Program(baseVertexShader, checkerboardShader);
-const bloomPrefilterProgram  = new Program(baseVertexShader, bloomPrefilterShader);
-const bloomBlurProgram       = new Program(baseVertexShader, bloomBlurShader);
-const bloomFinalProgram      = new Program(baseVertexShader, bloomFinalShader);
-const sunraysMaskProgram     = new Program(baseVertexShader, sunraysMaskShader);
-const sunraysProgram         = new Program(baseVertexShader, sunraysShader);
-const splatProgram           = new Program(baseVertexShader, splatShader);
-const advectionProgram       = new Program(baseVertexShader, advectionShader);
-const divergenceProgram      = new Program(baseVertexShader, divergenceShader);
-const curlProgram            = new Program(baseVertexShader, curlShader);
-const vorticityProgram       = new Program(baseVertexShader, vorticityShader);
-const pressureProgram        = new Program(baseVertexShader, pressureShader);
-const gradienSubtractProgram = new Program(baseVertexShader, gradientSubtractShader);
-
-const displayMaterial = new Material(baseVertexShader, displayShaderSource);
-
-function initFramebuffers () {
-    let simRes = getResolution(config.SIM_RESOLUTION);
-    let dyeRes = getResolution(config.DYE_RESOLUTION);
-
-    const texType = ext.halfFloatTexType;
-    const rgba    = ext.formatRGBA;
-    const rg      = ext.formatRG;
-    const r       = ext.formatR;
-    const filtering = ext.supportLinearFiltering ? gl.LINEAR : gl.NEAREST;
-
-    gl.disable(gl.BLEND);
-
-    if (dye == null)
-        dye = createDoubleFBO(dyeRes.width, dyeRes.height, rgba.internalFormat, rgba.format, texType, filtering);
-    else
-        dye = resizeDoubleFBO(dye, dyeRes.width, dyeRes.height, rgba.internalFormat, rgba.format, texType, filtering);
-
-    if (velocity == null)
-        velocity = createDoubleFBO(simRes.width, simRes.height, rg.internalFormat, rg.format, texType, filtering);
-    else
-        velocity = resizeDoubleFBO(velocity, simRes.width, simRes.height, rg.internalFormat, rg.format, texType, filtering);
-
-    divergence = createFBO      (simRes.width, simRes.height, r.internalFormat, r.format, texType, gl.NEAREST);
-    curl       = createFBO      (simRes.width, simRes.height, r.internalFormat, r.format, texType, gl.NEAREST);
-    pressure   = createDoubleFBO(simRes.width, simRes.height, r.internalFormat, r.format, texType, gl.NEAREST);
-
-    initBloomFramebuffers();
-    initSunraysFramebuffers();
-}
-
-function initBloomFramebuffers () {
-    let res = getResolution(config.BLOOM_RESOLUTION);
-
-    const texType = ext.halfFloatTexType;
-    const rgba = ext.formatRGBA;
-    const filtering = ext.supportLinearFiltering ? gl.LINEAR : gl.NEAREST;
-
-    bloom = createFBO(res.width, res.height, rgba.internalFormat, rgba.format, texType, filtering);
-
-    bloomFramebuffers.length = 0;
-    for (let i = 0; i < config.BLOOM_ITERATIONS; i++)
-    {
-        let width = res.width >> (i + 1);
-        let height = res.height >> (i + 1);
-
-        if (width < 2 || height < 2) break;
-
-        let fbo = createFBO(width, height, rgba.internalFormat, rgba.format, texType, filtering);
-        bloomFramebuffers.push(fbo);
-    }
-}
-
-function initSunraysFramebuffers () {
-    let res = getResolution(config.SUNRAYS_RESOLUTION);
-
-    const texType = ext.halfFloatTexType;
-    const r = ext.formatR;
-    const filtering = ext.supportLinearFiltering ? gl.LINEAR : gl.NEAREST;
-
-    sunrays     = createFBO(res.width, res.height, r.internalFormat, r.format, texType, filtering);
-    sunraysTemp = createFBO(res.width, res.height, r.internalFormat, r.format, texType, filtering);
-}
-
-function createFBO (w, h, internalFormat, format, type, param) {
-    gl.activeTexture(gl.TEXTURE0);
-    let texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, param);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, param);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, w, h, 0, format, type, null);
-
-    let fbo = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-    gl.viewport(0, 0, w, h);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-
-    let texelSizeX = 1.0 / w;
-    let texelSizeY = 1.0 / h;
-
-    return {
-        texture,
-        fbo,
-        width: w,
-        height: h,
-        texelSizeX,
-        texelSizeY,
-        attach (id) {
-            gl.activeTexture(gl.TEXTURE0 + id);
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            return id;
+        var d = function(t, e, n, r) {
+            var o, c = arguments.length, i = c < 3 ? e : null === r ? r = Object.getOwnPropertyDescriptor(e, n) : r;
+            if ("object" === ("undefined" == typeof Reflect ? "undefined" : y(Reflect)) && "function" == typeof Reflect.decorate)
+                i = Reflect.decorate(t, e, n, r);
+            else
+                for (var a = t.length - 1; a >= 0; a--)
+                    (o = t[a]) && (i = (c < 3 ? o(i) : c > 3 ? o(e, n, i) : o(e, n)) || i);
+            return c > 3 && i && Object.defineProperty(e, n, i),
+            i
         }
-    };
-}
-
-function createDoubleFBO (w, h, internalFormat, format, type, param) {
-    let fbo1 = createFBO(w, h, internalFormat, format, type, param);
-    let fbo2 = createFBO(w, h, internalFormat, format, type, param);
-
-    return {
-        width: w,
-        height: h,
-        texelSizeX: fbo1.texelSizeX,
-        texelSizeY: fbo1.texelSizeY,
-        get read () {
-            return fbo1;
-        },
-        set read (value) {
-            fbo1 = value;
-        },
-        get write () {
-            return fbo2;
-        },
-        set write (value) {
-            fbo2 = value;
-        },
-        swap () {
-            let temp = fbo1;
-            fbo1 = fbo2;
-            fbo2 = temp;
+          , b = n(29).b.tagName
+          , v = function(t) {
+            !function(t, e) {
+                if ("function" != typeof e && null !== e)
+                    throw new TypeError("Super expression must either be null or a function");
+                t.prototype = Object.create(e && e.prototype, {
+                    constructor: {
+                        value: t,
+                        writable: !0,
+                        configurable: !0
+                    }
+                }),
+                e && l(t, e)
+            }(p, t);
+            var e, n, r, o = s(p);
+            function p() {
+                var t;
+                return a(this, p),
+                (t = o.apply(this, arguments))._loadProgress = 0,
+                t._scene = !1,
+                t
+            }
+            return e = p,
+            (n = [{
+                key: "loadProgress",
+                get: function() {
+                    return this._loadProgress
+                }
+            }, {
+                key: "_connectedCallback",
+                value: function() {
+                    var t = this;
+                    f(h(p.prototype), "_connectedCallback", this).call(this),
+                    this.classList.add(b),
+                    this._loadProgress = 0,
+                    this._onPreloaderReady = Object(c.a)((function() {
+                        if (!t._disconnected)
+                            try {
+                                var e = JSON.parse(t.imageData);
+                                e && (t._scene = Object(i.a)({
+                                    parent: t,
+                                    data: e,
+                                    intersectionEl: t.parentElement,
+                                    handleLoaded: function() {
+                                        t._loadProgress = 1
+                                    }
+                                }))
+                            } catch (n) {}
+                    }
+                    ))
+                }
+            }, {
+                key: "_disconnectedCallback",
+                value: function() {
+                    f(h(p.prototype), "_disconnectedCallback", this).call(this),
+                    this._loadProgress = 0,
+                    this._onPreloaderReady && (this._onPreloaderReady.destroy(),
+                    this._onPreloaderReady = !1),
+                    this._scene && (this._scene.destroy(),
+                    this._scene = !1)
+                }
+            }]) && u(e.prototype, n),
+            r && u(e, r),
+            p
+        }(o.a);
+        d([Object(r.c)({
+            attribute: "image-data"
+        })], v.prototype, "imageData", void 0),
+        v = d([Object(r.b)(b)], v),
+        e.default = v
+    },
+    219: function(t, e, n) {
+        "use strict";
+        n.r(e);
+        var r = n(3)
+          , o = n(1)
+          , c = n(32)
+          , i = n(9);
+        function a(t, e) {
+            if (!(t instanceof e))
+                throw new TypeError("Cannot call a class as a function")
         }
-    }
-}
-
-function resizeFBO (target, w, h, internalFormat, format, type, param) {
-    let newFBO = createFBO(w, h, internalFormat, format, type, param);
-    copyProgram.bind();
-    gl.uniform1i(copyProgram.uniforms.uTexture, target.attach(0));
-    blit(newFBO);
-    return newFBO;
-}
-
-function resizeDoubleFBO (target, w, h, internalFormat, format, type, param) {
-    if (target.width == w && target.height == h)
-        return target;
-    target.read = resizeFBO(target.read, w, h, internalFormat, format, type, param);
-    target.write = createFBO(w, h, internalFormat, format, type, param);
-    target.width = w;
-    target.height = h;
-    target.texelSizeX = 1.0 / w;
-    target.texelSizeY = 1.0 / h;
-    return target;
-}
-
-function createTextureAsync (url) {
-    let texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 1, 1, 0, gl.RGB, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255]));
-
-    let obj = {
-        texture,
-        width: 1,
-        height: 1,
-        attach (id) {
-            gl.activeTexture(gl.TEXTURE0 + id);
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            return id;
+        function u(t, e) {
+            for (var n = 0; n < e.length; n++) {
+                var r = e[n];
+                r.enumerable = r.enumerable || !1,
+                r.configurable = !0,
+                "value"in r && (r.writable = !0),
+                Object.defineProperty(t, r.key, r)
+            }
         }
-    };
-
-    let image = new Image();
-    image.onload = () => {
-        obj.width = image.width;
-        obj.height = image.height;
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image);
-    };
-    image.src = url;
-
-    return obj;
-}
-
-function updateKeywords () {
-    let displayKeywords = [];
-    if (config.SHADING) displayKeywords.push("SHADING");
-    if (config.BLOOM) displayKeywords.push("BLOOM");
-    if (config.SUNRAYS) displayKeywords.push("SUNRAYS");
-    displayMaterial.setKeywords(displayKeywords);
-}
-
-updateKeywords();
-initFramebuffers();
-multipleSplats(parseInt(Math.random() * 20) + 5);
-
-let lastUpdateTime = Date.now();
-let colorUpdateTimer = 0.0;
-update();
-
-function update () {
-    const dt = calcDeltaTime();
-    if (resizeCanvas())
-        initFramebuffers();
-    updateColors(dt);
-    applyInputs();
-    if (!config.PAUSED)
-        step(dt);
-    render(null);
-    requestAnimationFrame(update);
-}
-
-function calcDeltaTime () {
-    let now = Date.now();
-    let dt = (now - lastUpdateTime) / 1000;
-    dt = Math.min(dt, 0.016666);
-    lastUpdateTime = now;
-    return dt;
-}
-
-function resizeCanvas () {
-    let width = scaleByPixelRatio(canvas.clientWidth);
-    let height = scaleByPixelRatio(canvas.clientHeight);
-    if (canvas.width != width || canvas.height != height) {
-        canvas.width = width;
-        canvas.height = height;
-        return true;
-    }
-    return false;
-}
-
-function updateColors (dt) {
-    if (!config.COLORFUL) return;
-
-    colorUpdateTimer += dt * config.COLOR_UPDATE_SPEED;
-    if (colorUpdateTimer >= 1) {
-        colorUpdateTimer = wrap(colorUpdateTimer, 0, 1);
-        pointers.forEach(p => {
-            p.color = generateColor();
-        });
-    }
-}
-
-function applyInputs () {
-    if (splatStack.length > 0)
-        multipleSplats(splatStack.pop());
-
-    pointers.forEach(p => {
-        if (p.moved) {
-            p.moved = false;
-            splatPointer(p);
+        function f(t, e, n) {
+            return f = "undefined" != typeof Reflect && Reflect.get ? Reflect.get : function(t, e, n) {
+                var r = function(t, e) {
+                    for (; !Object.prototype.hasOwnProperty.call(t, e) && null !== (t = h(t)); )
+                        ;
+                    return t
+                }(t, e);
+                if (r) {
+                    var o = Object.getOwnPropertyDescriptor(r, e);
+                    return o.get ? o.get.call(n) : o.value
+                }
+            }
+            ,
+            f(t, e, n || t)
         }
-    });
-}
-
-function step (dt) {
-    gl.disable(gl.BLEND);
-
-    curlProgram.bind();
-    gl.uniform2f(curlProgram.uniforms.texelSize, velocity.texelSizeX, velocity.texelSizeY);
-    gl.uniform1i(curlProgram.uniforms.uVelocity, velocity.read.attach(0));
-    blit(curl);
-
-    vorticityProgram.bind();
-    gl.uniform2f(vorticityProgram.uniforms.texelSize, velocity.texelSizeX, velocity.texelSizeY);
-    gl.uniform1i(vorticityProgram.uniforms.uVelocity, velocity.read.attach(0));
-    gl.uniform1i(vorticityProgram.uniforms.uCurl, curl.attach(1));
-    gl.uniform1f(vorticityProgram.uniforms.curl, config.CURL);
-    gl.uniform1f(vorticityProgram.uniforms.dt, dt);
-    blit(velocity.write);
-    velocity.swap();
-
-    divergenceProgram.bind();
-    gl.uniform2f(divergenceProgram.uniforms.texelSize, velocity.texelSizeX, velocity.texelSizeY);
-    gl.uniform1i(divergenceProgram.uniforms.uVelocity, velocity.read.attach(0));
-    blit(divergence);
-
-    clearProgram.bind();
-    gl.uniform1i(clearProgram.uniforms.uTexture, pressure.read.attach(0));
-    gl.uniform1f(clearProgram.uniforms.value, config.PRESSURE);
-    blit(pressure.write);
-    pressure.swap();
-
-    pressureProgram.bind();
-    gl.uniform2f(pressureProgram.uniforms.texelSize, velocity.texelSizeX, velocity.texelSizeY);
-    gl.uniform1i(pressureProgram.uniforms.uDivergence, divergence.attach(0));
-    for (let i = 0; i < config.PRESSURE_ITERATIONS; i++) {
-        gl.uniform1i(pressureProgram.uniforms.uPressure, pressure.read.attach(1));
-        blit(pressure.write);
-        pressure.swap();
+        function l(t, e) {
+            return l = Object.setPrototypeOf || function(t, e) {
+                return t.__proto__ = e,
+                t
+            }
+            ,
+            l(t, e)
+        }
+        function s(t) {
+            var e = function() {
+                if ("undefined" == typeof Reflect || !Reflect.construct)
+                    return !1;
+                if (Reflect.construct.sham)
+                    return !1;
+                if ("function" == typeof Proxy)
+                    return !0;
+                try {
+                    return Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], (function() {}
+                    ))),
+                    !0
+                } catch (t) {
+                    return !1
+                }
+            }();
+            return function() {
+                var n, r = h(t);
+                if (e) {
+                    var o = h(this).constructor;
+                    n = Reflect.construct(r, arguments, o)
+                } else
+                    n = r.apply(this, arguments);
+                return p(this, n)
+            }
+        }
+        function p(t, e) {
+            if (e && ("object" === y(e) || "function" == typeof e))
+                return e;
+            if (void 0 !== e)
+                throw new TypeError("Derived constructors may only return object or undefined");
+            return function(t) {
+                if (void 0 === t)
+                    throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
+                return t
+            }(t)
+        }
+        function h(t) {
+            return h = Object.setPrototypeOf ? Object.getPrototypeOf : function(t) {
+                return t.__proto__ || Object.getPrototypeOf(t)
+            }
+            ,
+            h(t)
+        }
+        function y(t) {
+            return y = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(t) {
+                return typeof t
+            }
+            : function(t) {
+                return t && "function" == typeof Symbol && t.constructor === Symbol && t !== Symbol.prototype ? "symbol" : typeof t
+            }
+            ,
+            y(t)
+        }
+        var d = function(t, e, n, r) {
+            var o, c = arguments.length, i = c < 3 ? e : null === r ? r = Object.getOwnPropertyDescriptor(e, n) : r;
+            if ("object" === ("undefined" == typeof Reflect ? "undefined" : y(Reflect)) && "function" == typeof Reflect.decorate)
+                i = Reflect.decorate(t, e, n, r);
+            else
+                for (var a = t.length - 1; a >= 0; a--)
+                    (o = t[a]) && (i = (c < 3 ? o(i) : c > 3 ? o(e, n, i) : o(e, n)) || i);
+            return c > 3 && i && Object.defineProperty(e, n, i),
+            i
+        }
+          , b = "scroll-to-anchor"
+          , v = function(t) {
+            !function(t, e) {
+                if ("function" != typeof e && null !== e)
+                    throw new TypeError("Super expression must either be null or a function");
+                t.prototype = Object.create(e && e.prototype, {
+                    constructor: {
+                        value: t,
+                        writable: !0,
+                        configurable: !0
+                    }
+                }),
+                e && l(t, e)
+            }(y, t);
+            var e, n, r, p = s(y);
+            function y() {
+                return a(this, y),
+                p.apply(this, arguments)
+            }
+            return e = y,
+            (n = [{
+                key: "createRenderRoot",
+                value: function() {
+                    return this
+                }
+            }, {
+                key: "connectedCallback",
+                value: function() {
+                    f(h(y.prototype), "connectedCallback", this).call(this),
+                    this.classList.add(b)
+                }
+            }, {
+                key: "firstUpdated",
+                value: function() {
+                    var t = this;
+                    this.addEventListener("click", (function() {
+                        var e;
+                        if (t.targetSelector)
+                            try {
+                                e = Object(o.g)(t.targetSelector)
+                            } catch (a) {}
+                        var n = t.toTop ? parseFloat(t.toTop) : 0;
+                        if (e) {
+                            var r = Object(i.c)().scrollTop + e.getBoundingClientRect().top + n;
+                            Object(c.a)(r, 750)
+                        }
+                    }
+                    ))
+                }
+            }]) && u(e.prototype, n),
+            r && u(e, r),
+            y
+        }(r.a);
+        d([Object(r.c)({
+            attribute: "target-selector"
+        })], v.prototype, "targetSelector", void 0),
+        d([Object(r.c)({
+            attribute: "to-top"
+        })], v.prototype, "toTop", void 0),
+        v = d([Object(r.b)(b)], v),
+        e.default = v
+    },
+    223: function(t, e, n) {
+        "use strict";
+        n.r(e);
+        var r = n(3)
+          , o = n(1)
+          , c = n(17)
+          , i = n.n(c)
+          , a = n(64);
+        function u(t, e) {
+            if (!(t instanceof e))
+                throw new TypeError("Cannot call a class as a function")
+        }
+        function f(t, e) {
+            for (var n = 0; n < e.length; n++) {
+                var r = e[n];
+                r.enumerable = r.enumerable || !1,
+                r.configurable = !0,
+                "value"in r && (r.writable = !0),
+                Object.defineProperty(t, r.key, r)
+            }
+        }
+        function l(t, e, n) {
+            return l = "undefined" != typeof Reflect && Reflect.get ? Reflect.get : function(t, e, n) {
+                var r = function(t, e) {
+                    for (; !Object.prototype.hasOwnProperty.call(t, e) && null !== (t = y(t)); )
+                        ;
+                    return t
+                }(t, e);
+                if (r) {
+                    var o = Object.getOwnPropertyDescriptor(r, e);
+                    return o.get ? o.get.call(n) : o.value
+                }
+            }
+            ,
+            l(t, e, n || t)
+        }
+        function s(t, e) {
+            return s = Object.setPrototypeOf || function(t, e) {
+                return t.__proto__ = e,
+                t
+            }
+            ,
+            s(t, e)
+        }
+        function p(t) {
+            var e = function() {
+                if ("undefined" == typeof Reflect || !Reflect.construct)
+                    return !1;
+                if (Reflect.construct.sham)
+                    return !1;
+                if ("function" == typeof Proxy)
+                    return !0;
+                try {
+                    return Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], (function() {}
+                    ))),
+                    !0
+                } catch (t) {
+                    return !1
+                }
+            }();
+            return function() {
+                var n, r = y(t);
+                if (e) {
+                    var o = y(this).constructor;
+                    n = Reflect.construct(r, arguments, o)
+                } else
+                    n = r.apply(this, arguments);
+                return h(this, n)
+            }
+        }
+        function h(t, e) {
+            if (e && ("object" === d(e) || "function" == typeof e))
+                return e;
+            if (void 0 !== e)
+                throw new TypeError("Derived constructors may only return object or undefined");
+            return function(t) {
+                if (void 0 === t)
+                    throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
+                return t
+            }(t)
+        }
+        function y(t) {
+            return y = Object.setPrototypeOf ? Object.getPrototypeOf : function(t) {
+                return t.__proto__ || Object.getPrototypeOf(t)
+            }
+            ,
+            y(t)
+        }
+        function d(t) {
+            return d = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(t) {
+                return typeof t
+            }
+            : function(t) {
+                return t && "function" == typeof Symbol && t.constructor === Symbol && t !== Symbol.prototype ? "symbol" : typeof t
+            }
+            ,
+            d(t)
+        }
+        var b = function(t, e, n, r) {
+            var o, c = arguments.length, i = c < 3 ? e : null === r ? r = Object.getOwnPropertyDescriptor(e, n) : r;
+            if ("object" === ("undefined" == typeof Reflect ? "undefined" : d(Reflect)) && "function" == typeof Reflect.decorate)
+                i = Reflect.decorate(t, e, n, r);
+            else
+                for (var a = t.length - 1; a >= 0; a--)
+                    (o = t[a]) && (i = (c < 3 ? o(i) : c > 3 ? o(e, n, i) : o(e, n)) || i);
+            return c > 3 && i && Object.defineProperty(e, n, i),
+            i
+        }
+          , v = a.c.tagNameFilter
+          , g = function(t) {
+            !function(t, e) {
+                if ("function" != typeof e && null !== e)
+                    throw new TypeError("Super expression must either be null or a function");
+                t.prototype = Object.create(e && e.prototype, {
+                    constructor: {
+                        value: t,
+                        writable: !0,
+                        configurable: !0
+                    }
+                }),
+                e && s(t, e)
+            }(c, t);
+            var e, n, r, o = p(c);
+            function c() {
+                var t;
+                return u(this, c),
+                (t = o.apply(this, arguments)).filterType = a.b.STRING,
+                t.state = a.a.EMPTY,
+                t
+            }
+            return e = c,
+            (n = [{
+                key: "handleClick",
+                get: function() {
+                    return this._handleClick
+                },
+                set: function(t) {
+                    this._handleClick = t
+                }
+            }, {
+                key: "createRenderRoot",
+                value: function() {
+                    return this
+                }
+            }, {
+                key: "connectedCallback",
+                value: function() {
+                    var t = this;
+                    l(y(c.prototype), "connectedCallback", this).call(this),
+                    this.classList.add(v);
+                    for (var e = this.children, n = 0; n < e.length; n++)
+                        e[n].onclick = function() {
+                            t.state === a.a.EMPTY || t.state === a.a.DESC ? t.state = a.a.ASC : t.state = a.a.DESC,
+                            t.handleClick && t.handleClick(t)
+                        }
+                }
+            }, {
+                key: "render",
+                value: function() {
+                    return this.classList.remove(a.a.ASC),
+                    this.classList.remove(a.a.DESC),
+                    this.classList.remove(a.a.EMPTY),
+                    this.classList.add(this.state),
+                    l(y(c.prototype), "render", this).call(this)
+                }
+            }, {
+                key: "reset",
+                value: function() {
+                    this.state = a.a.EMPTY
+                }
+            }]) && f(e.prototype, n),
+            r && f(e, r),
+            c
+        }(r.a);
+        b([Object(r.c)({
+            attribute: "filter-name"
+        })], g.prototype, "filterName", void 0),
+        b([Object(r.c)({
+            attribute: "filter-type"
+        })], g.prototype, "filterType", void 0),
+        b([Object(r.c)({
+            attribute: "state"
+        })], g.prototype, "state", void 0);
+        g = b([Object(r.b)(v)], g);
+        function m(t, e) {
+            if (!(t instanceof e))
+                throw new TypeError("Cannot call a class as a function")
+        }
+        function O(t, e) {
+            for (var n = 0; n < e.length; n++) {
+                var r = e[n];
+                r.enumerable = r.enumerable || !1,
+                r.configurable = !0,
+                "value"in r && (r.writable = !0),
+                Object.defineProperty(t, r.key, r)
+            }
+        }
+        function _(t, e, n) {
+            return _ = "undefined" != typeof Reflect && Reflect.get ? Reflect.get : function(t, e, n) {
+                var r = function(t, e) {
+                    for (; !Object.prototype.hasOwnProperty.call(t, e) && null !== (t = P(t)); )
+                        ;
+                    return t
+                }(t, e);
+                if (r) {
+                    var o = Object.getOwnPropertyDescriptor(r, e);
+                    return o.get ? o.get.call(n) : o.value
+                }
+            }
+            ,
+            _(t, e, n || t)
+        }
+        function w(t, e) {
+            return w = Object.setPrototypeOf || function(t, e) {
+                return t.__proto__ = e,
+                t
+            }
+            ,
+            w(t, e)
+        }
+        function j(t) {
+            var e = function() {
+                if ("undefined" == typeof Reflect || !Reflect.construct)
+                    return !1;
+                if (Reflect.construct.sham)
+                    return !1;
+                if ("function" == typeof Proxy)
+                    return !0;
+                try {
+                    return Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], (function() {}
+                    ))),
+                    !0
+                } catch (t) {
+                    return !1
+                }
+            }();
+            return function() {
+                var n, r = P(t);
+                if (e) {
+                    var o = P(this).constructor;
+                    n = Reflect.construct(r, arguments, o)
+                } else
+                    n = r.apply(this, arguments);
+                return R(this, n)
+            }
+        }
+        function R(t, e) {
+            if (e && ("object" === k(e) || "function" == typeof e))
+                return e;
+            if (void 0 !== e)
+                throw new TypeError("Derived constructors may only return object or undefined");
+            return function(t) {
+                if (void 0 === t)
+                    throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
+                return t
+            }(t)
+        }
+        function P(t) {
+            return P = Object.setPrototypeOf ? Object.getPrototypeOf : function(t) {
+                return t.__proto__ || Object.getPrototypeOf(t)
+            }
+            ,
+            P(t)
+        }
+        function k(t) {
+            return k = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(t) {
+                return typeof t
+            }
+            : function(t) {
+                return t && "function" == typeof Symbol && t.constructor === Symbol && t !== Symbol.prototype ? "symbol" : typeof t
+            }
+            ,
+            k(t)
+        }
+        var S = function(t, e, n, r) {
+            var o, c = arguments.length, i = c < 3 ? e : null === r ? r = Object.getOwnPropertyDescriptor(e, n) : r;
+            if ("object" === ("undefined" == typeof Reflect ? "undefined" : k(Reflect)) && "function" == typeof Reflect.decorate)
+                i = Reflect.decorate(t, e, n, r);
+            else
+                for (var a = t.length - 1; a >= 0; a--)
+                    (o = t[a]) && (i = (c < 3 ? o(i) : c > 3 ? o(e, n, i) : o(e, n)) || i);
+            return c > 3 && i && Object.defineProperty(e, n, i),
+            i
+        }
+          , C = a.c.tagNameHead
+          , E = function(t) {
+            !function(t, e) {
+                if ("function" != typeof e && null !== e)
+                    throw new TypeError("Super expression must either be null or a function");
+                t.prototype = Object.create(e && e.prototype, {
+                    constructor: {
+                        value: t,
+                        writable: !0,
+                        configurable: !0
+                    }
+                }),
+                e && w(t, e)
+            }(i, t);
+            var e, n, r, c = j(i);
+            function i() {
+                var t;
+                return m(this, i),
+                (t = c.apply(this, arguments))._handleChange = !1,
+                t
+            }
+            return e = i,
+            (n = [{
+                key: "filterName",
+                get: function() {
+                    var t;
+                    return this._filters.forEach((function(e) {
+                        e.state !== a.a.EMPTY && (t = e.filterName)
+                    }
+                    )),
+                    t
+                }
+            }, {
+                key: "filterType",
+                get: function() {
+                    var t;
+                    return this._filters.forEach((function(e) {
+                        e.state !== a.a.EMPTY && (t = e.filterType)
+                    }
+                    )),
+                    t
+                }
+            }, {
+                key: "filterState",
+                get: function() {
+                    var t;
+                    return this._filters.forEach((function(e) {
+                        e.state !== a.a.EMPTY && (t = e.state)
+                    }
+                    )),
+                    t
+                }
+            }, {
+                key: "handleChange",
+                get: function() {
+                    return this._handleChange
+                },
+                set: function(t) {
+                    this._handleChange = t
+                }
+            }, {
+                key: "createRenderRoot",
+                value: function() {
+                    return this
+                }
+            }, {
+                key: "connectedCallback",
+                value: function() {
+                    var t = this;
+                    this.classList.add(C);
+                    var e = Object(o.f)("".concat(a.c.tagNameFilter), this);
+                    this._filters = e,
+                    e.forEach((function(e) {
+                        e.handleClick = function(e) {
+                            t._onChange(e)
+                        }
+                    }
+                    ))
+                }
+            }, {
+                key: "disconnectedCallback",
+                value: function() {
+                    _(P(i.prototype), "disconnectedCallback", this).call(this)
+                }
+            }, {
+                key: "_onChange",
+                value: function(t) {
+                    this._filters.forEach((function(e) {
+                        e !== t && e.reset()
+                    }
+                    )),
+                    this.handleChange && this.handleChange()
+                }
+            }]) && O(e.prototype, n),
+            r && O(e, r),
+            i
+        }(r.a)
+          , x = (E = S([Object(r.b)(C)], E),
+        n(171))
+          , T = n.n(x)
+          , B = n(51);
+        function D(t, e) {
+            if (!(t instanceof e))
+                throw new TypeError("Cannot call a class as a function")
+        }
+        function N(t, e) {
+            for (var n = 0; n < e.length; n++) {
+                var r = e[n];
+                r.enumerable = r.enumerable || !1,
+                r.configurable = !0,
+                "value"in r && (r.writable = !0),
+                Object.defineProperty(t, r.key, r)
+            }
+        }
+        function A(t, e, n) {
+            return A = "undefined" != typeof Reflect && Reflect.get ? Reflect.get : function(t, e, n) {
+                var r = function(t, e) {
+                    for (; !Object.prototype.hasOwnProperty.call(t, e) && null !== (t = I(t)); )
+                        ;
+                    return t
+                }(t, e);
+                if (r) {
+                    var o = Object.getOwnPropertyDescriptor(r, e);
+                    return o.get ? o.get.call(n) : o.value
+                }
+            }
+            ,
+            A(t, e, n || t)
+        }
+        function M(t, e) {
+            return M = Object.setPrototypeOf || function(t, e) {
+                return t.__proto__ = e,
+                t
+            }
+            ,
+            M(t, e)
+        }
+        function L(t) {
+            var e = function() {
+                if ("undefined" == typeof Reflect || !Reflect.construct)
+                    return !1;
+                if (Reflect.construct.sham)
+                    return !1;
+                if ("function" == typeof Proxy)
+                    return !0;
+                try {
+                    return Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], (function() {}
+                    ))),
+                    !0
+                } catch (t) {
+                    return !1
+                }
+            }();
+            return function() {
+                var n, r = I(t);
+                if (e) {
+                    var o = I(this).constructor;
+                    n = Reflect.construct(r, arguments, o)
+                } else
+                    n = r.apply(this, arguments);
+                return H(this, n)
+            }
+        }
+        function H(t, e) {
+            if (e && ("object" === Y(e) || "function" == typeof e))
+                return e;
+            if (void 0 !== e)
+                throw new TypeError("Derived constructors may only return object or undefined");
+            return function(t) {
+                if (void 0 === t)
+                    throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
+                return t
+            }(t)
+        }
+        function I(t) {
+            return I = Object.setPrototypeOf ? Object.getPrototypeOf : function(t) {
+                return t.__proto__ || Object.getPrototypeOf(t)
+            }
+            ,
+            I(t)
+        }
+        function Y(t) {
+            return Y = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(t) {
+                return typeof t
+            }
+            : function(t) {
+                return t && "function" == typeof Symbol && t.constructor === Symbol && t !== Symbol.prototype ? "symbol" : typeof t
+            }
+            ,
+            Y(t)
+        }
+        var F = function(t, e, n, r) {
+            var o, c = arguments.length, i = c < 3 ? e : null === r ? r = Object.getOwnPropertyDescriptor(e, n) : r;
+            if ("object" === ("undefined" == typeof Reflect ? "undefined" : Y(Reflect)) && "function" == typeof Reflect.decorate)
+                i = Reflect.decorate(t, e, n, r);
+            else
+                for (var a = t.length - 1; a >= 0; a--)
+                    (o = t[a]) && (i = (c < 3 ? o(i) : c > 3 ? o(e, n, i) : o(e, n)) || i);
+            return c > 3 && i && Object.defineProperty(e, n, i),
+            i
+        }
+          , W = a.c.tagNameItems
+          , J = a.c.visibleCount
+          , U = function(t) {
+            !function(t, e) {
+                if ("function" != typeof e && null !== e)
+                    throw new TypeError("Super expression must either be null or a function");
+                t.prototype = Object.create(e && e.prototype, {
+                    constructor: {
+                        value: t,
+                        writable: !0,
+                        configurable: !0
+                    }
+                }),
+                e && M(t, e)
+            }(i, t);
+            var e, n, r, c = L(i);
+            function i() {
+                var t;
+                return D(this, i),
+                (t = c.apply(this, arguments)).moreButtonText1 = "{num}",
+                t.moreButtonText2 = "{num}",
+                t.moreButtonText = "{num}",
+                t._allShown = !1,
+                t._showAllButton = !1,
+                t._items = [],
+                t
+            }
+            return e = i,
+            (n = [{
+                key: "createRenderRoot",
+                value: function() {
+                    return this
+                }
+            }, {
+                key: "connectedCallback",
+                value: function() {
+                    this.classList.add(W),
+                    this._processItems(),
+                    this._items.length > J && this._createMoreButton()
+                }
+            }, {
+                key: "disconnectedCallback",
+                value: function() {
+                    A(I(i.prototype), "disconnectedCallback", this).call(this)
+                }
+            }, {
+                key: "_processItems",
+                value: function() {
+                    var t = Object(o.f)("*[data-item]", this)
+                      , e = [];
+                    t.forEach((function(t) {
+                        var n = "data-filter-name"
+                          , r = Object(o.f)("*[".concat(n, "]"), t)
+                          , c = {};
+                        r.forEach((function(t) {
+                            var e = t.getAttribute(n);
+                            c[e] = t.innerHTML
+                        }
+                        ));
+                        var i = Object.assign({
+                            el: t
+                        }, c);
+                        e.push(i)
+                    }
+                    )),
+                    this._items = e
+                }
+            }, {
+                key: "_createMoreButton",
+                value: function() {
+                    var t = this;
+                    if (!this._showAllButton) {
+                        var e, n, r, o, c = (e = this._items.length,
+                        n = [this.moreButtonText1, this.moreButtonText2, this.moreButtonText],
+                        r = Math.abs(e) % 100,
+                        o = r % 10,
+                        r > 10 && r < 20 ? n[2] : o > 1 && o < 5 ? n[1] : 1 === o ? n[0] : n[2]);
+                        c = c.replace("{num}", "".concat(this._items.length)),
+                        this._showAllButton = new B.a(c),
+                        this._showAllButton.type = "button",
+                        this._showAllButton.buttonType = "button",
+                        this._showAllButton.classNames = "narrow grey",
+                        this.parentElement.appendChild(this._showAllButton),
+                        this._showAllButton.onclick = function() {
+                            t._allShown = !0,
+                            t._showItems(),
+                            t._showAllButton && (t._showAllButton.style.display = "none")
+                        }
+                    }
+                }
+            }, {
+                key: "filter",
+                value: function(t, e, n) {
+                    var r = this;
+                    if (n !== a.a.EMPTY) {
+                        this._items.forEach((function(n, o) {
+                            e === a.b.NUM && (r._items[o][t] = parseFloat(n[t]))
+                        }
+                        ));
+                        var o = T()(this._items, [t], [n]);
+                        this._items = o,
+                        o.forEach((function(t) {
+                            r.appendChild(t.el)
+                        }
+                        )),
+                        this._showItems()
+                    }
+                }
+            }, {
+                key: "_showItems",
+                value: function() {
+                    var t = this._allShown ? 1 / 0 : J;
+                    this._items.forEach((function(e, n) {
+                        n >= t - 1 ? e.el.classList.add("hidden") : e.el.classList.remove("hidden")
+                    }
+                    ))
+                }
+            }]) && N(e.prototype, n),
+            r && N(e, r),
+            i
+        }(r.a);
+        F([Object(r.c)({
+            attribute: "more-button-text-1"
+        })], U.prototype, "moreButtonText1", void 0),
+        F([Object(r.c)({
+            attribute: "more-button-text-2"
+        })], U.prototype, "moreButtonText2", void 0),
+        F([Object(r.c)({
+            attribute: "more-button-text"
+        })], U.prototype, "moreButtonText", void 0);
+        U = F([Object(r.b)(W)], U);
+        function z(t, e) {
+            if (!(t instanceof e))
+                throw new TypeError("Cannot call a class as a function")
+        }
+        function X(t, e) {
+            for (var n = 0; n < e.length; n++) {
+                var r = e[n];
+                r.enumerable = r.enumerable || !1,
+                r.configurable = !0,
+                "value"in r && (r.writable = !0),
+                Object.defineProperty(t, r.key, r)
+            }
+        }
+        function G(t, e, n) {
+            return G = "undefined" != typeof Reflect && Reflect.get ? Reflect.get : function(t, e, n) {
+                var r = function(t, e) {
+                    for (; !Object.prototype.hasOwnProperty.call(t, e) && null !== (t = V(t)); )
+                        ;
+                    return t
+                }(t, e);
+                if (r) {
+                    var o = Object.getOwnPropertyDescriptor(r, e);
+                    return o.get ? o.get.call(n) : o.value
+                }
+            }
+            ,
+            G(t, e, n || t)
+        }
+        function q(t, e) {
+            return q = Object.setPrototypeOf || function(t, e) {
+                return t.__proto__ = e,
+                t
+            }
+            ,
+            q(t, e)
+        }
+        function K(t) {
+            var e = function() {
+                if ("undefined" == typeof Reflect || !Reflect.construct)
+                    return !1;
+                if (Reflect.construct.sham)
+                    return !1;
+                if ("function" == typeof Proxy)
+                    return !0;
+                try {
+                    return Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], (function() {}
+                    ))),
+                    !0
+                } catch (t) {
+                    return !1
+                }
+            }();
+            return function() {
+                var n, r = V(t);
+                if (e) {
+                    var o = V(this).constructor;
+                    n = Reflect.construct(r, arguments, o)
+                } else
+                    n = r.apply(this, arguments);
+                return Q(this, n)
+            }
+        }
+        function Q(t, e) {
+            if (e && ("object" === Z(e) || "function" == typeof e))
+                return e;
+            if (void 0 !== e)
+                throw new TypeError("Derived constructors may only return object or undefined");
+            return function(t) {
+                if (void 0 === t)
+                    throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
+                return t
+            }(t)
+        }
+        function V(t) {
+            return V = Object.setPrototypeOf ? Object.getPrototypeOf : function(t) {
+                return t.__proto__ || Object.getPrototypeOf(t)
+            }
+            ,
+            V(t)
+        }
+        function Z(t) {
+            return Z = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(t) {
+                return typeof t
+            }
+            : function(t) {
+                return t && "function" == typeof Symbol && t.constructor === Symbol && t !== Symbol.prototype ? "symbol" : typeof t
+            }
+            ,
+            Z(t)
+        }
+        var $ = function(t, e, n, r) {
+            var o, c = arguments.length, i = c < 3 ? e : null === r ? r = Object.getOwnPropertyDescriptor(e, n) : r;
+            if ("object" === ("undefined" == typeof Reflect ? "undefined" : Z(Reflect)) && "function" == typeof Reflect.decorate)
+                i = Reflect.decorate(t, e, n, r);
+            else
+                for (var a = t.length - 1; a >= 0; a--)
+                    (o = t[a]) && (i = (c < 3 ? o(i) : c > 3 ? o(e, n, i) : o(e, n)) || i);
+            return c > 3 && i && Object.defineProperty(e, n, i),
+            i
+        }
+          , tt = a.c.tagName
+          , et = function(t) {
+            !function(t, e) {
+                if ("function" != typeof e && null !== e)
+                    throw new TypeError("Super expression must either be null or a function");
+                t.prototype = Object.create(e && e.prototype, {
+                    constructor: {
+                        value: t,
+                        writable: !0,
+                        configurable: !0
+                    }
+                }),
+                e && q(t, e)
+            }(u, t);
+            var e, n, r, c = K(u);
+            function u() {
+                var t;
+                return z(this, u),
+                (t = c.apply(this, arguments))._head = !1,
+                t._items = !1,
+                t
+            }
+            return e = u,
+            (n = [{
+                key: "createRenderRoot",
+                value: function() {
+                    return this
+                }
+            }, {
+                key: "connectedCallback",
+                value: function() {
+                    var t = this;
+                    G(V(u.prototype), "connectedCallback", this).call(this),
+                    this.classList.add(tt),
+                    i()((function() {
+                        t._head = Object(o.g)(a.c.tagNameHead, t),
+                        t._items = Object(o.g)(a.c.tagNameItems, t),
+                        t._head && t._items && (t._filter(),
+                        t._head.handleChange = function() {
+                            t._filter()
+                        }
+                        )
+                    }
+                    ), 500)
+                }
+            }, {
+                key: "_filter",
+                value: function() {
+                    this._head && this._items && this._head.filterName && this._head.filterType && this._head.filterState && this._items.filter(this._head.filterName, this._head.filterType, this._head.filterState)
+                }
+            }]) && X(e.prototype, n),
+            r && X(e, r),
+            u
+        }(r.a);
+        et = $([Object(r.b)(tt)], et);
+        e.default = et
+    },
+    226: function(t, e, n) {
+        "use strict";
+        n.r(e);
+        var r = n(3)
+          , o = n(12)
+          , c = n(35)
+          , i = n(1)
+          , a = n(0)
+          , u = n(30)
+          , f = n(19)
+          , l = n(13)
+          , s = n(26)
+          , p = n(7)
+          , h = n(5)
+          , y = n(55)
+          , d = n(71)
+          , b = d.a.tagName
+          , v = a.a.viewport;
+        function g(t, e) {
+            var n, r, o = !1;
+            !function() {
+                (n = new y.a).useChildCoords = !0,
+                n.classList.add("".concat(b, "__area"));
+                var e = Object(i.b)("a", {
+                    class: "".concat(b, "__el"),
+                    parent: n,
+                    attr: [["href", t.linkHref]],
+                    children: [Object(i.b)("span", {
+                        html: t.linkName
+                    })]
+                });
+                r = e,
+                e.addEventListener("click", (function(t) {
+                    t.preventDefault(),
+                    p.a.load({
+                        link: e
+                    })
+                }
+                )),
+                t.appendChild(n)
+            }();
+            var g = new f.a(t)
+              , m = new f.a(t);
+            t.appendChild(g.canvas);
+            var O = []
+              , _ = 0
+              , w = !1;
+            Object(s.a)(t.imageSrc, (function(t) {
+                o || (w = t,
+                function() {
+                    P(),
+                    k(),
+                    j = Object(u.a)((function() {
+                        k()
+                    }
+                    ), d.a.tagName, 50);
+                    var t = a.a.vevetPage;
+                    t && t.onPageShown((function() {
+                        k()
+                    }
+                    ));
+                    R = h.a.on("prerender", (function() {
+                        E()
+                    }
+                    )),
+                    d.a.handleHoverAreaChange = function() {
+                        P(),
+                        S()
+                    }
+                }(),
+                e())
+            }
+            ));
+            var j = !1
+              , R = !1;
+            function P() {
+                O = [];
+                for (var t = 0; t < d.a.length; t++)
+                    O.push({
+                        x: 0,
+                        y: 0,
+                        ease: 1
+                    });
+                _ = O.length
+            }
+            function k() {
+                o || (g.updateSize(),
+                S(),
+                E())
+            }
+            function S() {
+                var t = C(!1);
+                r.style.width = "".concat(t.width, "px"),
+                r.style.height = "".concat(t.height, "px");
+                var e = function() {
+                    var t = !(arguments.length > 0 && void 0 !== arguments[0]) || arguments[0]
+                      , e = g.width
+                      , n = g.height
+                      , r = g.dpr
+                      , o = d.a.hoverAreaX
+                      , c = d.a.hoverAreaY
+                      , i = o * e
+                      , a = c * n
+                      , u = (e - i) / 2
+                      , f = (n - a) / 2;
+                    t || (i /= r,
+                    a /= r,
+                    u /= r,
+                    f /= r);
+                    return {
+                        width: i,
+                        height: a,
+                        x: u,
+                        y: f
+                    }
+                }(!1);
+                n.style.width = "".concat(e.width, "px"),
+                n.style.height = "".concat(e.height, "px"),
+                n.style.top = "".concat(e.y, "px"),
+                n.style.left = "".concat(e.x, "px")
+            }
+            function C() {
+                var t = !(arguments.length > 0 && void 0 !== arguments[0]) || arguments[0]
+                  , e = g.width
+                  , n = g.height
+                  , r = g.dpr
+                  , o = d.a.desktopMaxWidth
+                  , c = d.a.desktopMaxHeight
+                  , i = d.a.tabletMaxWidth
+                  , a = d.a.tabletMaxHeight
+                  , u = d.a.mobileMaxWidth
+                  , f = d.a.mobileMaxHeight
+                  , l = d.a.ratio
+                  , s = 1
+                  , p = 1;
+                v.desktop ? (s = o,
+                p = c) : v.tablet ? (s = i,
+                p = a) : v.mobile && (s = u,
+                p = f);
+                var h = e * s
+                  , y = n * p
+                  , b = h
+                  , m = b * l;
+                return m > y && (b = (m = y) / l),
+                t || (b /= r,
+                m /= r),
+                {
+                    width: b,
+                    height: m
+                }
+            }
+            function E() {
+                var t = d.a.friction
+                  , e = d.a.showHoverArea;
+                n.friction = t;
+                var r = g.ctx
+                  , o = g.width
+                  , i = g.height;
+                if (0 !== o && 0 !== i) {
+                    !function() {
+                        if (!w)
+                            return;
+                        var t = C()
+                          , e = t.width
+                          , n = t.height;
+                        m.updateSize(e, n);
+                        var r = m.ctx
+                          , o = Object(c.a)({
+                            source: w,
+                            rule: "cover",
+                            scale: 1,
+                            width: e,
+                            height: n
+                        });
+                        r.clearRect(0, 0, e, n),
+                        r.drawImage(w, 0, 0, o.sourceWidth, o.sourceHeight, o.x, o.y, o.width, o.height)
+                    }(),
+                    r.save(),
+                    r.clearRect(0, 0, o, i),
+                    r.beginPath(),
+                    e && function() {
+                        var t = g.ctx
+                          , e = g.width
+                          , n = g.height
+                          , r = d.a.hoverAreaX
+                          , o = d.a.hoverAreaY
+                          , c = r * e
+                          , i = o * n
+                          , a = (e - c) / 2
+                          , u = (n - i) / 2;
+                        t.save(),
+                        t.beginPath(),
+                        t.rect(a, u, c, i),
+                        t.fillStyle = "rgba(255, 255, 255, .25)",
+                        t.fill(),
+                        t.closePath(),
+                        t.restore()
+                    }();
+                    for (var a = O.length - 1; a >= 0; a--)
+                        x(a);
+                    r.closePath(),
+                    r.restore()
+                }
+            }
+            function x(t) {
+                var e = O[t];
+                if (void 0 !== e) {
+                    var r = g.ctx
+                      , o = g.width
+                      , c = g.height
+                      , i = g.dpr
+                      , a = d.a.easeReduce
+                      , u = n.coords
+                      , f = C()
+                      , s = 1 - t * a;
+                    e.x = Object(l.a)(e.x, u.x, s),
+                    e.y = Object(l.a)(e.y, u.y, s);
+                    var p = o / 2 + e.x * i - f.width / 2
+                      , h = c / 2 + e.y * i - f.height / 2
+                      , y = 1 - 1 / _ * t;
+                    e.x === u.x && e.y === u.y && 0 !== t || (r.save(),
+                    r.beginPath(),
+                    r.globalAlpha = y,
+                    r.drawImage(m.canvas, p, h),
+                    r.closePath(),
+                    r.restore())
+                }
+            }
+            return {
+                destroy: function() {
+                    o = !0,
+                    j && j.destroy(),
+                    R && h.a.remove(R),
+                    n.remove(),
+                    g.canvas.remove(),
+                    d.a.handleHoverAreaChange = function() {}
+                }
+                .bind(this)
+            }
+        }
+        function m(t, e) {
+            if (!(t instanceof e))
+                throw new TypeError("Cannot call a class as a function")
+        }
+        function O(t, e) {
+            for (var n = 0; n < e.length; n++) {
+                var r = e[n];
+                r.enumerable = r.enumerable || !1,
+                r.configurable = !0,
+                "value"in r && (r.writable = !0),
+                Object.defineProperty(t, r.key, r)
+            }
+        }
+        function _(t, e, n) {
+            return _ = "undefined" != typeof Reflect && Reflect.get ? Reflect.get : function(t, e, n) {
+                var r = function(t, e) {
+                    for (; !Object.prototype.hasOwnProperty.call(t, e) && null !== (t = P(t)); )
+                        ;
+                    return t
+                }(t, e);
+                if (r) {
+                    var o = Object.getOwnPropertyDescriptor(r, e);
+                    return o.get ? o.get.call(n) : o.value
+                }
+            }
+            ,
+            _(t, e, n || t)
+        }
+        function w(t, e) {
+            return w = Object.setPrototypeOf || function(t, e) {
+                return t.__proto__ = e,
+                t
+            }
+            ,
+            w(t, e)
+        }
+        function j(t) {
+            var e = function() {
+                if ("undefined" == typeof Reflect || !Reflect.construct)
+                    return !1;
+                if (Reflect.construct.sham)
+                    return !1;
+                if ("function" == typeof Proxy)
+                    return !0;
+                try {
+                    return Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], (function() {}
+                    ))),
+                    !0
+                } catch (t) {
+                    return !1
+                }
+            }();
+            return function() {
+                var n, r = P(t);
+                if (e) {
+                    var o = P(this).constructor;
+                    n = Reflect.construct(r, arguments, o)
+                } else
+                    n = r.apply(this, arguments);
+                return R(this, n)
+            }
+        }
+        function R(t, e) {
+            if (e && ("object" === k(e) || "function" == typeof e))
+                return e;
+            if (void 0 !== e)
+                throw new TypeError("Derived constructors may only return object or undefined");
+            return function(t) {
+                if (void 0 === t)
+                    throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
+                return t
+            }(t)
+        }
+        function P(t) {
+            return P = Object.setPrototypeOf ? Object.getPrototypeOf : function(t) {
+                return t.__proto__ || Object.getPrototypeOf(t)
+            }
+            ,
+            P(t)
+        }
+        function k(t) {
+            return k = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(t) {
+                return typeof t
+            }
+            : function(t) {
+                return t && "function" == typeof Symbol && t.constructor === Symbol && t !== Symbol.prototype ? "symbol" : typeof t
+            }
+            ,
+            k(t)
+        }
+        var S = function(t, e, n, r) {
+            var o, c = arguments.length, i = c < 3 ? e : null === r ? r = Object.getOwnPropertyDescriptor(e, n) : r;
+            if ("object" === ("undefined" == typeof Reflect ? "undefined" : k(Reflect)) && "function" == typeof Reflect.decorate)
+                i = Reflect.decorate(t, e, n, r);
+            else
+                for (var a = t.length - 1; a >= 0; a--)
+                    (o = t[a]) && (i = (c < 3 ? o(i) : c > 3 ? o(e, n, i) : o(e, n)) || i);
+            return c > 3 && i && Object.defineProperty(e, n, i),
+            i
+        }
+          , C = d.a.tagName
+          , E = function(t) {
+            !function(t, e) {
+                if ("function" != typeof e && null !== e)
+                    throw new TypeError("Super expression must either be null or a function");
+                t.prototype = Object.create(e && e.prototype, {
+                    constructor: {
+                        value: t,
+                        writable: !0,
+                        configurable: !0
+                    }
+                }),
+                e && w(t, e)
+            }(c, t);
+            var e, n, r, o = j(c);
+            function c() {
+                var t;
+                return m(this, c),
+                (t = o.apply(this, arguments)).imageSrc = "",
+                t.linkHref = "",
+                t.linkName = "",
+                t._scene = !1,
+                t._loadProgress = 0,
+                t
+            }
+            return e = c,
+            (n = [{
+                key: "loadProgress",
+                get: function() {
+                    return this._loadProgress
+                }
+            }, {
+                key: "firstUpdated",
+                value: function() {
+                    this.classList.add(C)
+                }
+            }, {
+                key: "_connectedCallback",
+                value: function() {
+                    var t = this;
+                    _(P(c.prototype), "_connectedCallback", this).call(this),
+                    this._loadProgress = 0,
+                    this._scene = g(this, (function() {
+                        t._loadProgress = 1
+                    }
+                    ))
+                }
+            }, {
+                key: "_disconnectedCallback",
+                value: function() {
+                    _(P(c.prototype), "_disconnectedCallback", this).call(this),
+                    this._loadProgress = 0,
+                    this._scene && (this._scene.destroy(),
+                    this._scene = !1)
+                }
+            }]) && O(e.prototype, n),
+            r && O(e, r),
+            c
+        }(o.a);
+        S([Object(r.c)({
+            attribute: "image-src"
+        })], E.prototype, "imageSrc", void 0),
+        S([Object(r.c)({
+            attribute: "link-href"
+        })], E.prototype, "linkHref", void 0),
+        S([Object(r.c)({
+            attribute: "link-name"
+        })], E.prototype, "linkName", void 0),
+        E = S([Object(r.b)(C)], E);
+        e.default = E
     }
+}]);
 
-    gradienSubtractProgram.bind();
-    gl.uniform2f(gradienSubtractProgram.uniforms.texelSize, velocity.texelSizeX, velocity.texelSizeY);
-    gl.uniform1i(gradienSubtractProgram.uniforms.uPressure, pressure.read.attach(0));
-    gl.uniform1i(gradienSubtractProgram.uniforms.uVelocity, velocity.read.attach(1));
-    blit(velocity.write);
-    velocity.swap();
-
-    advectionProgram.bind();
-    gl.uniform2f(advectionProgram.uniforms.texelSize, velocity.texelSizeX, velocity.texelSizeY);
-    if (!ext.supportLinearFiltering)
-        gl.uniform2f(advectionProgram.uniforms.dyeTexelSize, velocity.texelSizeX, velocity.texelSizeY);
-    let velocityId = velocity.read.attach(0);
-    gl.uniform1i(advectionProgram.uniforms.uVelocity, velocityId);
-    gl.uniform1i(advectionProgram.uniforms.uSource, velocityId);
-    gl.uniform1f(advectionProgram.uniforms.dt, dt);
-    gl.uniform1f(advectionProgram.uniforms.dissipation, config.VELOCITY_DISSIPATION);
-    blit(velocity.write);
-    velocity.swap();
-
-    if (!ext.supportLinearFiltering)
-        gl.uniform2f(advectionProgram.uniforms.dyeTexelSize, dye.texelSizeX, dye.texelSizeY);
-    gl.uniform1i(advectionProgram.uniforms.uVelocity, velocity.read.attach(0));
-    gl.uniform1i(advectionProgram.uniforms.uSource, dye.read.attach(1));
-    gl.uniform1f(advectionProgram.uniforms.dissipation, config.DENSITY_DISSIPATION);
-    blit(dye.write);
-    dye.swap();
-}
-
-function render (target) {
-    if (config.BLOOM)
-        applyBloom(dye.read, bloom);
-    if (config.SUNRAYS) {
-        applySunrays(dye.read, dye.write, sunrays);
-        blur(sunrays, sunraysTemp, 1);
-    }
-
-    if (target == null || !config.TRANSPARENT) {
-        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-        gl.enable(gl.BLEND);
-    }
-    else {
-        gl.disable(gl.BLEND);
-    }
-
-    if (!config.TRANSPARENT)
-        drawColor(target, normalizeColor(config.BACK_COLOR));
-    if (target == null && config.TRANSPARENT)
-        drawCheckerboard(target);
-    drawDisplay(target);
-}
-
-function drawColor (target, color) {
-    colorProgram.bind();
-    gl.uniform4f(colorProgram.uniforms.color, color.r, color.g, color.b, 1);
-    blit(target);
-}
-
-function drawCheckerboard (target) {
-    checkerboardProgram.bind();
-    gl.uniform1f(checkerboardProgram.uniforms.aspectRatio, canvas.width / canvas.height);
-    blit(target);
-}
-
-function drawDisplay (target) {
-    let width = target == null ? gl.drawingBufferWidth : target.width;
-    let height = target == null ? gl.drawingBufferHeight : target.height;
-
-    displayMaterial.bind();
-    if (config.SHADING)
-        gl.uniform2f(displayMaterial.uniforms.texelSize, 1.0 / width, 1.0 / height);
-    gl.uniform1i(displayMaterial.uniforms.uTexture, dye.read.attach(0));
-    if (config.BLOOM) {
-        gl.uniform1i(displayMaterial.uniforms.uBloom, bloom.attach(1));
-        gl.uniform1i(displayMaterial.uniforms.uDithering, ditheringTexture.attach(2));
-        let scale = getTextureScale(ditheringTexture, width, height);
-        gl.uniform2f(displayMaterial.uniforms.ditherScale, scale.x, scale.y);
-    }
-    if (config.SUNRAYS)
-        gl.uniform1i(displayMaterial.uniforms.uSunrays, sunrays.attach(3));
-    blit(target);
-}
-
-function applyBloom (source, destination) {
-    if (bloomFramebuffers.length < 2)
-        return;
-
-    let last = destination;
-
-    gl.disable(gl.BLEND);
-    bloomPrefilterProgram.bind();
-    let knee = config.BLOOM_THRESHOLD * config.BLOOM_SOFT_KNEE + 0.0001;
-    let curve0 = config.BLOOM_THRESHOLD - knee;
-    let curve1 = knee * 2;
-    let curve2 = 0.25 / knee;
-    gl.uniform3f(bloomPrefilterProgram.uniforms.curve, curve0, curve1, curve2);
-    gl.uniform1f(bloomPrefilterProgram.uniforms.threshold, config.BLOOM_THRESHOLD);
-    gl.uniform1i(bloomPrefilterProgram.uniforms.uTexture, source.attach(0));
-    blit(last);
-
-    bloomBlurProgram.bind();
-    for (let i = 0; i < bloomFramebuffers.length; i++) {
-        let dest = bloomFramebuffers[i];
-        gl.uniform2f(bloomBlurProgram.uniforms.texelSize, last.texelSizeX, last.texelSizeY);
-        gl.uniform1i(bloomBlurProgram.uniforms.uTexture, last.attach(0));
-        blit(dest);
-        last = dest;
-    }
-
-    gl.blendFunc(gl.ONE, gl.ONE);
-    gl.enable(gl.BLEND);
-
-    for (let i = bloomFramebuffers.length - 2; i >= 0; i--) {
-        let baseTex = bloomFramebuffers[i];
-        gl.uniform2f(bloomBlurProgram.uniforms.texelSize, last.texelSizeX, last.texelSizeY);
-        gl.uniform1i(bloomBlurProgram.uniforms.uTexture, last.attach(0));
-        gl.viewport(0, 0, baseTex.width, baseTex.height);
-        blit(baseTex);
-        last = baseTex;
-    }
-
-    gl.disable(gl.BLEND);
-    bloomFinalProgram.bind();
-    gl.uniform2f(bloomFinalProgram.uniforms.texelSize, last.texelSizeX, last.texelSizeY);
-    gl.uniform1i(bloomFinalProgram.uniforms.uTexture, last.attach(0));
-    gl.uniform1f(bloomFinalProgram.uniforms.intensity, config.BLOOM_INTENSITY);
-    blit(destination);
-}
-
-function applySunrays (source, mask, destination) {
-    gl.disable(gl.BLEND);
-    sunraysMaskProgram.bind();
-    gl.uniform1i(sunraysMaskProgram.uniforms.uTexture, source.attach(0));
-    blit(mask);
-
-    sunraysProgram.bind();
-    gl.uniform1f(sunraysProgram.uniforms.weight, config.SUNRAYS_WEIGHT);
-    gl.uniform1i(sunraysProgram.uniforms.uTexture, mask.attach(0));
-    blit(destination);
-}
-
-function blur (target, temp, iterations) {
-    blurProgram.bind();
-    for (let i = 0; i < iterations; i++) {
-        gl.uniform2f(blurProgram.uniforms.texelSize, target.texelSizeX, 0.0);
-        gl.uniform1i(blurProgram.uniforms.uTexture, target.attach(0));
-        blit(temp);
-
-        gl.uniform2f(blurProgram.uniforms.texelSize, 0.0, target.texelSizeY);
-        gl.uniform1i(blurProgram.uniforms.uTexture, temp.attach(0));
-        blit(target);
-    }
-}
-
-function splatPointer (pointer) {
-    let dx = pointer.deltaX * config.SPLAT_FORCE;
-    let dy = pointer.deltaY * config.SPLAT_FORCE;
-    splat(pointer.texcoordX, pointer.texcoordY, dx, dy, pointer.color);
-}
-
-function multipleSplats (amount) {
-    for (let i = 0; i < amount; i++) {
-        const color = generateColor();
-        color.r *= 10.0;
-        color.g *= 10.0;
-        color.b *= 10.0;
-        const x = Math.random();
-        const y = Math.random();
-        const dx = 1000 * (Math.random() - 0.5);
-        const dy = 1000 * (Math.random() - 0.5);
-        splat(x, y, dx, dy, color);
-    }
-}
-
-function splat (x, y, dx, dy, color) {
-    splatProgram.bind();
-    gl.uniform1i(splatProgram.uniforms.uTarget, velocity.read.attach(0));
-    gl.uniform1f(splatProgram.uniforms.aspectRatio, canvas.width / canvas.height);
-    gl.uniform2f(splatProgram.uniforms.point, x, y);
-    gl.uniform3f(splatProgram.uniforms.color, dx, dy, 0.0);
-    gl.uniform1f(splatProgram.uniforms.radius, correctRadius(config.SPLAT_RADIUS / 100.0));
-    blit(velocity.write);
-    velocity.swap();
-
-    gl.uniform1i(splatProgram.uniforms.uTarget, dye.read.attach(0));
-    gl.uniform3f(splatProgram.uniforms.color, color.r, color.g, color.b);
-    blit(dye.write);
-    dye.swap();
-}
-
-function correctRadius (radius) {
-    let aspectRatio = canvas.width / canvas.height;
-    if (aspectRatio > 1)
-        radius *= aspectRatio;
-    return radius;
-}
-
-canvas.addEventListener('mousedown', e => {
-    let posX = scaleByPixelRatio(e.offsetX);
-    let posY = scaleByPixelRatio(e.offsetY);
-    let pointer = pointers.find(p => p.id == -1);
-    if (pointer == null)
-        pointer = new pointerPrototype();
-    updatePointerDownData(pointer, -1, posX, posY);
-});
-
-canvas.addEventListener('mousemove', e => {
-    let pointer = pointers[0];
-    if (!pointer.down) return;
-    let posX = scaleByPixelRatio(e.offsetX);
-    let posY = scaleByPixelRatio(e.offsetY);
-    updatePointerMoveData(pointer, posX, posY);
-});
-
-window.addEventListener('mouseup', () => {
-    updatePointerUpData(pointers[0]);
-});
-
-canvas.addEventListener('touchstart', e => {
-    e.preventDefault();
-    const touches = e.targetTouches;
-    while (touches.length >= pointers.length)
-        pointers.push(new pointerPrototype());
-    for (let i = 0; i < touches.length; i++) {
-        let posX = scaleByPixelRatio(touches[i].pageX);
-        let posY = scaleByPixelRatio(touches[i].pageY);
-        updatePointerDownData(pointers[i + 1], touches[i].identifier, posX, posY);
-    }
-});
-
-canvas.addEventListener('touchmove', e => {
-    e.preventDefault();
-    const touches = e.targetTouches;
-    for (let i = 0; i < touches.length; i++) {
-        let pointer = pointers[i + 1];
-        if (!pointer.down) continue;
-        let posX = scaleByPixelRatio(touches[i].pageX);
-        let posY = scaleByPixelRatio(touches[i].pageY);
-        updatePointerMoveData(pointer, posX, posY);
-    }
-}, false);
-
-window.addEventListener('touchend', e => {
-    const touches = e.changedTouches;
-    for (let i = 0; i < touches.length; i++)
-    {
-        let pointer = pointers.find(p => p.id == touches[i].identifier);
-        if (pointer == null) continue;
-        updatePointerUpData(pointer);
-    }
-});
-
-window.addEventListener('keydown', e => {
-    if (e.code === 'KeyP')
-        config.PAUSED = !config.PAUSED;
-    if (e.key === ' ')
-        splatStack.push(parseInt(Math.random() * 20) + 5);
-});
-
-function updatePointerDownData (pointer, id, posX, posY) {
-    pointer.id = id;
-    pointer.down = true;
-    pointer.moved = false;
-    pointer.texcoordX = posX / canvas.width;
-    pointer.texcoordY = 1.0 - posY / canvas.height;
-    pointer.prevTexcoordX = pointer.texcoordX;
-    pointer.prevTexcoordY = pointer.texcoordY;
-    pointer.deltaX = 0;
-    pointer.deltaY = 0;
-    pointer.color = generateColor();
-}
-
-function updatePointerMoveData (pointer, posX, posY) {
-    pointer.prevTexcoordX = pointer.texcoordX;
-    pointer.prevTexcoordY = pointer.texcoordY;
-    pointer.texcoordX = posX / canvas.width;
-    pointer.texcoordY = 1.0 - posY / canvas.height;
-    pointer.deltaX = correctDeltaX(pointer.texcoordX - pointer.prevTexcoordX);
-    pointer.deltaY = correctDeltaY(pointer.texcoordY - pointer.prevTexcoordY);
-    pointer.moved = Math.abs(pointer.deltaX) > 0 || Math.abs(pointer.deltaY) > 0;
-}
-
-function updatePointerUpData (pointer) {
-    pointer.down = false;
-}
-
-function correctDeltaX (delta) {
-    let aspectRatio = canvas.width / canvas.height;
-    if (aspectRatio < 1) delta *= aspectRatio;
-    return delta;
-}
-
-function correctDeltaY (delta) {
-    let aspectRatio = canvas.width / canvas.height;
-    if (aspectRatio > 1) delta /= aspectRatio;
-    return delta;
-}
-
-function generateColor () {
-    let c = HSVtoRGB(Math.random(), 1.0, 1.0);
-    c.r *= 0.15;
-    c.g *= 0.15;
-    c.b *= 0.15;
-    return c;
-}
-
-function HSVtoRGB (h, s, v) {
-    let r, g, b, i, f, p, q, t;
-    i = Math.floor(h * 6);
-    f = h * 6 - i;
-    p = v * (1 - s);
-    q = v * (1 - f * s);
-    t = v * (1 - (1 - f) * s);
-
-    switch (i % 6) {
-        case 0: r = v, g = t, b = p; break;
-        case 1: r = q, g = v, b = p; break;
-        case 2: r = p, g = v, b = t; break;
-        case 3: r = p, g = q, b = v; break;
-        case 4: r = t, g = p, b = v; break;
-        case 5: r = v, g = p, b = q; break;
-    }
-
-    return {
-        r,
-        g,
-        b
-    };
-}
-
-function normalizeColor (input) {
-    let output = {
-        r: input.r / 255,
-        g: input.g / 255,
-        b: input.b / 255
-    };
-    return output;
-}
-
-function wrap (value, min, max) {
-    let range = max - min;
-    if (range == 0) return min;
-    return (value - min) % range + min;
-}
-
-function getResolution (resolution) {
-    let aspectRatio = gl.drawingBufferWidth / gl.drawingBufferHeight;
-    if (aspectRatio < 1)
-        aspectRatio = 1.0 / aspectRatio;
-
-    let min = Math.round(resolution);
-    let max = Math.round(resolution * aspectRatio);
-
-    if (gl.drawingBufferWidth > gl.drawingBufferHeight)
-        return { width: max, height: min };
-    else
-        return { width: min, height: max };
-}
-
-function getTextureScale (texture, width, height) {
-    return {
-        x: width / texture.width,
-        y: height / texture.height
-    };
-}
-
-function scaleByPixelRatio (input) {
-    let pixelRatio = window.devicePixelRatio || 1;
-    return Math.floor(input * pixelRatio);
-}
-
-function hashCode (s) {
-    if (s.length == 0) return 0;
-    let hash = 0;
-    for (let i = 0; i < s.length; i++) {
-        hash = (hash << 5) - hash + s.charCodeAt(i);
-        hash |= 0; // Convert to 32bit integer
-    }
-    return hash;
-};
